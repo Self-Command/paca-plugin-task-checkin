@@ -25,10 +25,15 @@ func(w *Worker)prepare(ctx context.Context,project,taskID string)(model.Instance
  meta,_:=task.Custom["_integration_state_v1"].(map[string]any)
  blocked:=task.Status==c.ArchiveStatus||meta["archived"]==true||meta["recurring"]==true
  start,due:=model.Precise(task,"start"),model.Precise(task,"due");sm,dm:=c.StartMinutes,c.DueMinutes
- var rawRule []byte
- err=w.DB.QueryRow(ctx,"SELECT config FROM task_rules WHERE project_id=$1 AND task_id=$2",project,taskID).Scan(&rawRule)
+ var rawRule []byte;var ruleBinding string
+ err=w.DB.QueryRow(ctx,"SELECT config,base_fingerprint FROM task_rules WHERE project_id=$1 AND task_id=$2",project,taskID).Scan(&rawRule,&ruleBinding)
  if err!=nil&&!errors.Is(err,pgx.ErrNoRows){return model.Instance{},err}
- if len(rawRule)>0{var rule model.Rule;if json.Unmarshal(rawRule,&rule)!=nil{return model.Instance{},errors.New("invalid task rule")};if !rule.Enabled{blocked=true};if rule.Start!=nil{start=rule.Start};if rule.Due!=nil{due=rule.Due};if rule.StartMinutes!=nil{sm=*rule.StartMinutes};if rule.DueMinutes!=nil{dm=*rule.DueMinutes}}
+ if len(rawRule)>0{
+  fingerprint:=model.TaskFingerprint(task)
+  if ruleBinding==""{if _,err=w.DB.Exec(ctx,"UPDATE task_rules SET base_fingerprint=$3 WHERE project_id=$1 AND task_id=$2 AND base_fingerprint=''",project,taskID,fingerprint);err!=nil{return model.Instance{},err}}else if ruleBinding!=fingerprint {
+   _,_=w.DB.Exec(ctx,"UPDATE instances SET state=CASE WHEN freeze_at<=clock_timestamp() THEN 'conflict' ELSE 'cancelled' END,last_error='source time changed; reconfirm exact time' WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict')",project,taskID);return model.Instance{},errors.New("source time changed; reconfirm exact time")
+  }
+ var rule model.Rule;if json.Unmarshal(rawRule,&rule)!=nil{return model.Instance{},errors.New("invalid task rule")};if !rule.Enabled{blocked=true};if rule.Start!=nil{start=rule.Start};if rule.Due!=nil{due=rule.Due};if rule.StartMinutes!=nil{sm=*rule.StartMinutes};if rule.DueMinutes!=nil{dm=*rule.DueMinutes}}
  source:=json.RawMessage(`{}`)
  if meta["source"]=="tasknotes"{source,err=w.source(ctx,project,taskID);if err!=nil{return model.Instance{},err}}
  tx,err:=w.DB.Begin(ctx);if err!=nil{return model.Instance{},err};defer tx.Rollback(ctx)

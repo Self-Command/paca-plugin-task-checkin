@@ -65,7 +65,7 @@ func(p *integrationPlugin)saveTask(req *plugin.Request,res *plugin.Response){
  frozen,err:=p.db.Query("SELECT id FROM instances WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp()",req.PathParam("projectId"),req.PathParam("taskId"))
  if err!=nil{res.Error(503,"window check unavailable");return};if len(frozen.Rows)>0{res.Error(409,"window opened; cancel before scheduling another instance");return}
  raw,_:=json.Marshal(body.Config)
- result,err:=p.db.Query("WITH updated AS (UPDATE task_rules SET config=$3::jsonb,revision=revision+1 WHERE project_id=$1 AND task_id=$2 AND revision=$4 RETURNING task_id), inserted AS (INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb WHERE $4=0 ON CONFLICT DO NOTHING RETURNING task_id) SELECT task_id FROM updated UNION ALL SELECT task_id FROM inserted",req.PathParam("projectId"),req.PathParam("taskId"),string(raw),body.Revision)
+ result,err:=p.db.Query("WITH updated AS (UPDATE task_rules SET config=$3::jsonb,revision=revision+1,base_fingerprint='' WHERE project_id=$1 AND task_id=$2 AND revision=$4 RETURNING task_id), inserted AS (INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb WHERE $4=0 ON CONFLICT DO NOTHING RETURNING task_id) SELECT task_id FROM updated UNION ALL SELECT task_id FROM inserted",req.PathParam("projectId"),req.PathParam("taskId"),string(raw),body.Revision)
  if err!=nil{res.Error(503,"rule save failed");return};if len(result.Rows)!=1{res.Error(409,"rule changed; reload");return}
  _,_=p.db.Exec("UPDATE project_settings SET needs_reconcile=TRUE WHERE project_id=$1",req.PathParam("projectId"))
  res.JSON(200,map[string]any{"revision":body.Revision+1})

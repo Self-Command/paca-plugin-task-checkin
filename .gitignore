@@ -8,3 +8,10 @@
 /data/
 *.log
 internal/buildinfo/stamp.go
+
+/frontend/web-dist/
+/ci-secrets/
+/verification/
+/ci.Caddyfile
+/gofmt.patch
+/frontend-lock.patch

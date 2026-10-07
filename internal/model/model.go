@@ -40,6 +40,8 @@ type Task struct{
  Project string `json:"project_id"`
  Title string `json:"title"`
  Status string `json:"status_id"`
+ StartDate *time.Time `json:"start_date"`
+ DueDate *time.Time `json:"due_date"`
  Custom map[string]any `json:"custom_fields"`
 }
 type Instance struct{
@@ -77,7 +79,16 @@ func DesiredStatus(kind string,hasEnd bool,c Config)string{
 }
 func Precise(t Task,kind string)*time.Time{
  m,_:=t.Custom["_integration_state_v1"].(map[string]any)
+ core:=t.StartDate;if kind=="due"{core=t.DueDate}
+ if core==nil{return nil}
  if m[kind+"_precision"]!="instant"{return nil}
  raw,_:=m[kind+"_instant"].(string);instant,err:=time.Parse(time.RFC3339Nano,raw);if err!=nil{return nil}
+ zone,_:=m["timezone"].(string);day,_:=m[kind+"_core_date"].(string);loc,err:=time.LoadLocation(zone)
+ if err!=nil||day==""||day!=core.UTC().Format("2006-01-02")||day!=instant.In(loc).Format("2006-01-02"){return nil}
  utc:=instant.UTC();return &utc
+}
+
+func TaskFingerprint(t Task)string{
+ m,_:=t.Custom["_integration_state_v1"].(map[string]any)
+ return Hash(map[string]any{"start_date":t.StartDate,"due_date":t.DueDate,"start_instant":m["start_instant"],"due_instant":m["due_instant"],"start_precision":m["start_precision"],"due_precision":m["due_precision"],"timezone":m["timezone"]})
 }

@@ -48,7 +48,7 @@ jobs:
       - name: Frontend typecheck and build
         working-directory: frontend
         run: |
-          bun install
+          bun install --frozen-lockfile
           git diff -- bun.lock > ../frontend-lock.patch
           bun run typecheck
           bun run build
