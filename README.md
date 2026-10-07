@@ -27,10 +27,10 @@
 
 `/checkin-api/v1/sync/` 使用每设备可撤销配对令牌，读取范围限项目、来源连接和已记录媒体。增量记录、照片、状态版本分别处理。状态写回要求当前 revision；旧打卡记录仍可下载照片，但不能覆盖较新状态。冲突和重复解决保留原结果。
 
-`/internal/v1/action`、`/internal/v1/task`、`/internal/v1/writeback-match` 使用独立内部授权，仅供 B/A 对接；插件之间不访问其他 schema。receipt 匹配要求来源、路径、状态、正文 SHA 和当前实例 revision 全部一致。实际防循环还需要 A 和 D 对接后完成全链路测试，本阶段不把接口存在等同于全链路已通过。
+`/internal/v1/action`、`/internal/v1/task`、`/internal/v1/writeback-match` 使用独立内部授权，仅供 B/A 对接；插件之间不访问其他 schema。receipt 匹配要求来源、路径、状态、正文 SHA 和当前实例 revision 全部一致。配合固定来源版本的 A/D，Action 已验证真实官方 Obsidian 界面创建任务、网页拍照打卡、状态和照片回写，以及回写事件确认不重新生成提醒。验证报告随源码发行保留；真实手机验收单独记录。
 
 ## 验证边界
 
-Action 运行 Go vet/race 单测、TinyGo、TypeScript、生产网页构建、官方 Paca 注册/迁移/启停、私有 RustFS 上传、移动浏览器页面及数据库截止检查。截图和报告绑定源码 SHA。真实 Android 相机、HMS 后台通知及 Obsidian 回写属于后续集成验收，未执行时明确列为未验证。
+Action 运行 Go vet/race 单测、TinyGo、TypeScript、生产网页构建、官方 Paca 注册/迁移/启停、私有 RustFS 上传、移动浏览器页面及数据库截止检查。截图和报告绑定源码 SHA。Obsidian 回写由独立 D 仓库的真实官方桌面应用 E2E 验证；Android 内置网页、系统文件选择和照片上传由 App Action 模拟器验证。真实 Android 相机、HMS 后台通知及手机端 Obsidian 仍需设备确认。
 
 数据库访问为每个插件加独立查询标识，避免官方宿主共享 PostgreSQL 连接池在切换 schema 后复用其他插件的缓存执行计划。保持独立 schema、角色和 API 边界，使用三个插件的匹配发行产物。
