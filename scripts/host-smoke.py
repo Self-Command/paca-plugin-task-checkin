@@ -57,10 +57,32 @@ assert request('GET',path+'/settings')['revision']==2
 pair=request('POST',path+'/pairing',{'name':'test vault','connection_id':'11111111-1111-4111-8111-111111111111'},201)
 assert len(pair['token'])==64
 request('DELETE',path+'/pairing/'+pair['id'])
+
+# Retain revoked records: reloading must never reuse their primary keys or tokens.
+pair_ids={pair['id']};pair_tokens={pair['token']}
+for phase in range(3):
+    for number in range(4):
+        extra=request('POST',path+'/pairing',{'name':f'配对重载检查 {phase}-{number}','connection_id':'11111111-1111-4111-8111-111111111111'},201)
+        assert len(extra['token'])==64 and extra['id'] not in pair_ids and extra['token'] not in pair_tokens
+        pair_ids.add(extra['id']);pair_tokens.add(extra['token'])
+        request('DELETE',path+'/pairing/'+extra['id'])
+    request('PATCH',f'/admin/plugins/{installed["id"]}',{'manifest':manifest,'version':manifest['version'],'enabled':True})
+    assert request('GET',f'/plugins/{plugin_id}/health')['schema_version']==1
+# Persist DB and restart the official host: RNG state must not restart a sequence.
+cmd('docker','restart','paca-ci-api')
+for _ in range(45):
+    try:
+        request('GET',f'/plugins/{plugin_id}/health');break
+    except (OSError,RuntimeError):time.sleep(1)
+else:raise RuntimeError('host did not recover')
+extra=request('POST',path+'/pairing',{'name':'重启后配对','connection_id':'11111111-1111-4111-8111-111111111111'},201)
+assert extra['id'] not in pair_ids and extra['token'] not in pair_tokens
+request('DELETE',path+'/pairing/'+extra['id'])
+
 request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':False})
 request('GET',f'/plugins/{plugin_id}/health',expected=404)
 request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':True})
 # Actual native worker and private S3, browser upload and exact-deadline integration.
 exec((ROOT/'scripts/checkin-integration.py').read_text(),globals())
 verification=ROOT/'verification';verification.mkdir(exist_ok=True)
-(verification/'host-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'official_core':'v0.18.6','schema':1,'settings_cas':True,'pairing_revocation':True,'independent_plugin_enable_disable':True,'native_photo_and_browser':True},indent=2))
+(verification/'host-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'official_core':'v0.18.6','schema':1,'settings_cas':True,'pairing_revocation':True,'pairing_entropy_survives_reload_and_restart':True,'independent_plugin_enable_disable':True,'native_photo_and_browser':True},indent=2))

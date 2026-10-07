@@ -34,3 +34,8 @@
 Action 运行 Go vet/race 单测、TinyGo、TypeScript、生产网页构建、官方 Paca 注册/迁移/启停、私有 RustFS 上传、移动浏览器页面及数据库截止检查。截图和报告绑定源码 SHA。Obsidian 回写由独立 D 仓库的真实官方桌面应用 E2E 验证；Android 内置网页、系统文件选择和照片上传由 App Action 模拟器验证。真实 Android 相机、HMS 后台通知及手机端 Obsidian 仍需设备确认。
 
 数据库访问为每个插件加独立查询标识，避免官方宿主共享 PostgreSQL 连接池在切换 schema 后复用其他插件的缓存执行计划。保持独立 schema、角色和 API 边界，使用三个插件的匹配发行产物。
+
+
+## WASM 凭据与重载
+
+WASM 后端的随机编号、配对令牌、worker 凭据及 AES-GCM nonce 使用原生 PostgreSQL 的随机 UUID 组合获取新鲜随机数据，避免模块状态恢复后复用历史序列。无需额外数据库扩展；原密文格式保持兼容。原生 Go worker 保留操作系统随机源。Action 包含错误时拒绝生成凭据的检查，打卡插件另验收连续配对、撤销后重新配对、模块重载与宿主重启。

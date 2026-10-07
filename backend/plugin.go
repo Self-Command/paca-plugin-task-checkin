@@ -21,6 +21,7 @@ type integrationPlugin struct {
 
 func (p *integrationPlugin) Init(ctx *plugin.Context) error {
 	p.db = &scopedDB{ctx.DB()}
+	configureEntropy(p.db)
 	p.cfg = ctx.Config()
 	ctx.Route("GET", "/health", p.health)
 	ctx.Route("GET", "/worker/control", p.workerControl)
