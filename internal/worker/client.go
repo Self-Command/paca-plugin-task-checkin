@@ -147,7 +147,7 @@ func (w *Worker) control(ctx context.Context) error {
 		Schema  int    `json:"schema_version"`
 	}
 	if response.StatusCode != 200 || json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&c) != nil || !c.Enabled || c.ID != PluginID || c.Schema != 1 || c.Version != buildinfo.Version || c.Source != buildinfo.SourceSHA {
-		return errors.New("host disabled or worker mismatch")
+		return fmt.Errorf("host control HTTP %d: enabled=%t id=%s schema=%d version=%s source=%s", response.StatusCode, c.Enabled, c.ID, c.Schema, c.Version, c.Source)
 	}
 	return nil
 }

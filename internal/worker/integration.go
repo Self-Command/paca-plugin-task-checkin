@@ -28,7 +28,7 @@ func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := w.control(r.Context()); err != nil {
-		fail(out, 503, "host unavailable")
+		fail(out, 503, err.Error())
 		return
 	}
 	i, err := w.prepare(r.Context(), input.Project, input.Task)
@@ -56,7 +56,7 @@ func (w *Worker) matchWriteback(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := w.control(r.Context()); err != nil {
-		fail(out, 503, "host unavailable")
+		fail(out, 503, err.Error())
 		return
 	}
 	var input struct {
