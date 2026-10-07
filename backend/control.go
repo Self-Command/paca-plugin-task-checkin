@@ -5,7 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
- "fmt"
+	"fmt"
 	plugin "github.com/Paca-AI/plugin-sdk-go"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/buildinfo"
 	"strconv"
@@ -45,9 +45,12 @@ func validWorkerSignature(secret, timestamp, nonce, signature string, now time.T
 
 func (p *integrationPlugin) workerControl(req *plugin.Request, res *plugin.Response) {
 	row, err := p.db.Query("SELECT secret_enc,enabled,revision FROM worker_settings WHERE id=1")
-	if err != nil {res.Error(503,fmt.Sprintf("worker configuration read failed: %.250s",err.Error()));return}
- if len(row.Rows) != 1 {
-		res.Error(503, fmt.Sprintf("worker not configured: %d rows",len(row.Rows)))
+	if err != nil {
+		res.Error(503, fmt.Sprintf("worker configuration read failed: %.250s", err.Error()))
+		return
+	}
+	if len(row.Rows) != 1 {
+		res.Error(503, fmt.Sprintf("worker not configured: %d rows", len(row.Rows)))
 		return
 	}
 	cipher, ok := row.Rows[0][0].(string)

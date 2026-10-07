@@ -52,6 +52,8 @@ type Rule struct {
 }
 type Task struct {
 	ID          string         `json:"id"`
+	CreatedAt   *time.Time     `json:"created_at"`
+	TaskNumber  int64          `json:"task_number"`
 	Project     string         `json:"project_id"`
 	Title       string         `json:"title"`
 	Status      string         `json:"status_id"`
