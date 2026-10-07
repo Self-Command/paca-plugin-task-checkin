@@ -15,12 +15,12 @@ const pluginID = "com.selfcommand.task-checkin"
 const pluginVersion = buildinfo.Version
 
 type integrationPlugin struct {
-	db  *plugin.DB
+	db  *scopedDB
 	cfg *plugin.Config
 }
 
 func (p *integrationPlugin) Init(ctx *plugin.Context) error {
-	p.db = ctx.DB()
+	p.db = &scopedDB{ctx.DB()}
 	p.cfg = ctx.Config()
 	ctx.Route("GET", "/health", p.health)
 	ctx.Route("GET", "/worker/control", p.workerControl)

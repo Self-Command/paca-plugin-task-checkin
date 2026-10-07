@@ -32,3 +32,5 @@
 ## 验证边界
 
 Action 运行 Go vet/race 单测、TinyGo、TypeScript、生产网页构建、官方 Paca 注册/迁移/启停、私有 RustFS 上传、移动浏览器页面及数据库截止检查。截图和报告绑定源码 SHA。真实 Android 相机、HMS 后台通知及 Obsidian 回写属于后续集成验收，未执行时明确列为未验证。
+
+数据库访问为每个插件加独立查询标识，避免官方宿主共享 PostgreSQL 连接池在切换 schema 后复用其他插件的缓存执行计划。保持独立 schema、角色和 API 边界，使用三个插件的匹配发行产物。
