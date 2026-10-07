@@ -135,7 +135,7 @@ func (p *integrationPlugin) saveTask(req *plugin.Request, res *plugin.Response) 
 		return
 	}
 	raw, _ := json.Marshal(body.Config)
-	changed, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text||':'||$2::text,0))), frozen AS MATERIALIZED (SELECT id FROM instances,task_lock WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp() FOR UPDATE OF instances) INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb FROM task_lock WHERE ($4=0 OR EXISTS(SELECT 1 FROM task_rules WHERE project_id=$1 AND task_id=$2 AND revision=$4)) AND NOT EXISTS(SELECT 1 FROM frozen) ON CONFLICT(project_id,task_id) DO UPDATE SET config=EXCLUDED.config,revision=task_rules.revision+1,base_fingerprint='' WHERE task_rules.revision=$4 AND NOT EXISTS(SELECT 1 FROM frozen)", req.PathParam("projectId"), req.PathParam("taskId"), string(raw), body.Revision)
+	changed, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text||':'||$2::uuid::text,0))), frozen AS MATERIALIZED (SELECT id FROM instances,task_lock WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp() FOR UPDATE OF instances) INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb FROM task_lock WHERE ($4=0 OR EXISTS(SELECT 1 FROM task_rules WHERE project_id=$1 AND task_id=$2 AND revision=$4)) AND NOT EXISTS(SELECT 1 FROM frozen) ON CONFLICT(project_id,task_id) DO UPDATE SET config=EXCLUDED.config,revision=task_rules.revision+1,base_fingerprint='' WHERE task_rules.revision=$4 AND NOT EXISTS(SELECT 1 FROM frozen)", req.PathParam("projectId"), req.PathParam("taskId"), string(raw), body.Revision)
 	if err != nil {
 		res.Error(503, "rule save failed")
 		return
@@ -148,7 +148,7 @@ func (p *integrationPlugin) saveTask(req *plugin.Request, res *plugin.Response) 
 	res.JSON(200, map[string]any{"revision": body.Revision + 1})
 }
 func (p *integrationPlugin) cancel(req *plugin.Request, res *plugin.Response) {
-	_, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text||':'||$2::text,0))), optout AS (INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,'{\"enabled\":false}'::jsonb FROM task_lock ON CONFLICT(project_id,task_id) DO UPDATE SET config=jsonb_set(task_rules.config,'{enabled}','false'),revision=task_rules.revision+1 RETURNING task_id) UPDATE instances SET state='cancelled' WHERE project_id=$1 AND task_id IN(SELECT task_id FROM optout) AND state IN('active','frozen','conflict')", req.PathParam("projectId"), req.PathParam("taskId"))
+	_, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text||':'||$2::uuid::text,0))), optout AS (INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,'{\"enabled\":false}'::jsonb FROM task_lock ON CONFLICT(project_id,task_id) DO UPDATE SET config=jsonb_set(task_rules.config,'{enabled}','false'),revision=task_rules.revision+1 RETURNING task_id) UPDATE instances SET state='cancelled' WHERE project_id=$1 AND task_id IN(SELECT task_id FROM optout) AND state IN('active','frozen','conflict')", req.PathParam("projectId"), req.PathParam("taskId"))
 	if err != nil {
 		res.Error(503, "cancel failed")
 		return

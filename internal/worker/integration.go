@@ -60,6 +60,7 @@ func (w *Worker) matchWriteback(out http.ResponseWriter, r *http.Request) {
 		Path       string   `json:"path"`
 		Status     string   `json:"status"`
 		Fields     []string `json:"changed_fields"`
+ DetailsHash string `json:"details_sha256"`
 	}
 	if !readJSON(out, r, &input) {
 		return
@@ -70,7 +71,7 @@ func (w *Worker) matchWriteback(out http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	rows, err := w.DB.Query(r.Context(), "SELECT r.id::text,r.expected FROM receipts r JOIN devices d ON d.id=r.device_id WHERE d.enabled AND d.connection_id=$1 AND r.expected->>'source_ref'=$2 AND r.expected->>'path'=$3 AND r.expected->>'tasknotes_status'=$4 AND r.state IN('prepared','observed','confirmed') AND r.created_at>NOW()-INTERVAL '7 days' ORDER BY r.created_at DESC LIMIT 1", input.Connection, input.Source, input.Path, input.Status)
+	rows, err := w.DB.Query(r.Context(), "SELECT r.id::text,r.expected FROM receipts r JOIN devices d ON d.id=r.device_id WHERE d.enabled AND d.connection_id=$1 AND r.expected->>'source_ref'=$2 AND r.expected->>'path'=$3 AND r.expected->>'tasknotes_status'=$4 AND r.state IN('prepared','observed','confirmed') AND r.expected->>'details_sha256'=$5 AND r.created_at>NOW()-INTERVAL '7 days' AND EXISTS(SELECT 1 FROM instances i WHERE i.id::text=r.expected->>'instance_id' AND i.status_revision=(r.expected->>'revision')::integer AND i.state IN('active','frozen')) ORDER BY r.created_at DESC LIMIT 1", input.Connection, input.Source, input.Path, input.Status,input.DetailsHash)
 	if err != nil {
 		fail(out, 503, "receipt lookup unavailable")
 		return

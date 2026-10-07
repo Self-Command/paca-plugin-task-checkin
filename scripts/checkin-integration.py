@@ -61,7 +61,8 @@ with sync_playwright() as pw:
     expect(page.get_by_role('heading',name='独立双卡验收')).to_be_visible()
     assert not page.url.split('#')[-1].startswith('token=')
     page.locator('input[type=file]').last.set_input_files({'name':'check.png','mimeType':'image/png','buffer':png})
-    page.get_by_role('button',name='确认打卡',exact=True).click()
+    with page.expect_request(lambda r:r.url.endswith('/checkin-api/v1/submit') and r.method=='POST') as submitted_request:
+        page.get_by_role('button',name='确认打卡',exact=True).click()
     expect(page.get_by_role('status').filter(has_text='打卡成功')).to_be_visible(timeout=30000)
     (ROOT/'verification').mkdir(exist_ok=True);page.screenshot(path=str(ROOT/'verification/checkin-mobile.png'),full_page=True)
     # End succeeds first; start is still independently authorized after Paca is done.
@@ -77,6 +78,9 @@ with sync_playwright() as pw:
     expect(page2.get_by_role('status').filter(has_text='打卡成功')).to_be_visible(timeout=30000)
     time.sleep(6)
     assert request('GET',f'/projects/{project["id"]}/tasks/{task["id"]}')['data']['status_id']==done,'late start downgraded finished task'
+    # An acknowledged or lost response retries the exact operation, never another record.
+    replay=context.request.post('http://127.0.0.1:18082/checkin-api/v1/submit',headers={'Origin':'http://127.0.0.1:18082'},data=submitted_request.value.post_data_json)
+    assert replay.status==200 and replay.json()['duplicate']
     # Original photo is private and cannot be fetched without its card session.
     record=context.request.get('http://127.0.0.1:18082/checkin-api/v1/session').json()['record']
     native('GET','/checkin-api/v1/photo/'+record['media_id'],expected=401)
@@ -88,14 +92,14 @@ with sync_playwright() as pw:
     context.close();context2.close();browser.close()
 # Independent expired fixture: upload can complete but final submit crosses the deadline.
 late=request('POST',f'/projects/{project["id"]}/tasks',{'title':'截止验收'},201)['data']
-close=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(seconds=4)).isoformat()
+close=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(seconds=8)).isoformat()
 request('PUT',path+f'/tasks/{late["id"]}/checkin',{'config':{'enabled':True,'due':close},'revision':0})
 entry=native('POST','/internal/v1/action',{'project_id':project['id'],'task_id':late['id'],'kind':'due','target':close},headers=auth)
 token=entry['metadata']['action_url'].split('#token=')[1]
 cookies=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 native('POST','/checkin-api/v1/exchange',{'token':token},opener=cookies)
 photo=native('POST','/checkin-api/v1/photos',png,201,opener=cookies,headers={'Content-Type':'image/png'})
-time.sleep(4.1)
+time.sleep(max(0,(datetime.datetime.fromisoformat(close)-datetime.datetime.now(datetime.timezone.utc)).total_seconds())+.1)
 native('POST','/checkin-api/v1/submit',{'media_id':photo['id'],'revision':1,'op_id':'cross-cutoff-test','note':''},410,opener=cookies)
 # Invalid payloads and cross-origin browser writes fail closed.
 native('POST','/checkin-api/v1/exchange',{'token':token},403,headers={'Origin':'https://untrusted.invalid'})
