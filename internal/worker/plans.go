@@ -325,7 +325,7 @@ func (w *Worker) dispatchStatus(ctx context.Context) error {
 	}
 	fresh.Custom["_checkin_state_v1"] = map[string]any{"v": 1, "instance_id": instance, "status_revision": revision, "end_succeeded": hasEnd, "status_id": status}
 	// Serialize per-instance status operations so a late start cannot overwrite a completed end.
-	if err = w.call(ctx, "PATCH", "/projects/"+project+"/tasks/"+task, map[string]any{"status_id": status, "custom_fields": fresh.Custom}, nil); err != nil {
+	if err = w.call(ctx, "PATCH", "/projects/"+project+"/tasks/"+task, map[string]any{"status_id":status,"custom_fields":map[string]any{"_checkin_state_v1":fresh.Custom["_checkin_state_v1"]}}, nil); err != nil {
 		_, updateErr := tx.Exec(ctx, "UPDATE outbox SET attempts=attempts+1,next_attempt=NOW()+INTERVAL '30 seconds',last_error='task status API unavailable' WHERE id=$1", id)
 		if updateErr != nil {
 			return updateErr

@@ -66,6 +66,7 @@ request('PUT',task_path+'/checkin',{'config':rule,'revision':1},409)
 def action(kind,target):return native('POST','/internal/v1/action',{'project_id':project['id'],'task_id':task['id'],'kind':kind,'target':target},headers=auth)
 end_action=action('due',due)
 start_action=action('start',start)
+card_headers={'X-Checkin-Instance':end_action['instance_id'],'X-Checkin-Kind':'due'}
 assert end_action['instance_id']==start_action['instance_id']
 assert action('due',due)['metadata']==end_action['metadata'],'retry changed authorization snapshot'
 import struct,zlib
@@ -103,16 +104,16 @@ with sync_playwright() as pw:
     time.sleep(6)
     assert request('GET',f'/projects/{project["id"]}/tasks/{task["id"]}')['data']['status_id']==done,'late start downgraded finished task'
     # An acknowledged or lost response retries the exact operation, never another record.
-    replay=context.request.post('http://127.0.0.1:18082/checkin-api/v1/submit',headers={'Origin':'http://127.0.0.1:18082'},data=submitted_request.value.post_data_json)
+    replay=context.request.post('http://127.0.0.1:18082/checkin-api/v1/submit',headers={'Origin':'http://127.0.0.1:18082',**card_headers},data=submitted_request.value.post_data_json)
     assert replay.status==200 and replay.json()['duplicate']
     # Original photo is private and cannot be fetched without its card session.
-    record=context.request.get('http://127.0.0.1:18082/checkin-api/v1/session').json()['record']
+    record=context.request.get('http://127.0.0.1:18082/checkin-api/v1/session',headers=card_headers).json()['record']
     native('GET','/checkin-api/v1/photo/'+record['media_id'],expected=401)
     # Same operation returns original record; replacing a successful photo conflicts.
-    dup=context.request.post('http://127.0.0.1:18082/checkin-api/v1/submit',headers={'Origin':'http://127.0.0.1:18082'},data={'media_id':record['media_id'],'revision':1,'note':'','op_id':'different-operation'})
+    dup=context.request.post('http://127.0.0.1:18082/checkin-api/v1/submit',headers={'Origin':'http://127.0.0.1:18082',**card_headers},data={'media_id':record['media_id'],'revision':1,'note':'','op_id':'different-operation'})
     assert dup.status==409
     request('POST',task_path+'/cancel',{})
-    assert context.request.get('http://127.0.0.1:18082/checkin-api/v1/session').status==410
+    assert context.request.get('http://127.0.0.1:18082/checkin-api/v1/session',headers=card_headers).status==410
     context.close();context2.close();browser.close()
 # Independent expired fixture: upload can complete but final submit crosses the deadline.
 late=request('POST',f'/projects/{project["id"]}/tasks',{'title':'截止验收'},201)['data']
@@ -122,9 +123,10 @@ entry=native('POST','/internal/v1/action',{'project_id':project['id'],'task_id':
 token=entry['metadata']['action_url'].split('#token=')[1]
 cookies=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 native('POST','/checkin-api/v1/exchange',{'token':token},opener=cookies)
-photo=native('POST','/checkin-api/v1/photos',png,201,opener=cookies,headers={'Content-Type':'image/png'})
+late_headers={'X-Checkin-Instance':entry['instance_id'],'X-Checkin-Kind':'due'}
+photo=native('POST','/checkin-api/v1/photos',png,201,opener=cookies,headers={'Content-Type':'image/png',**late_headers})
 time.sleep(max(0,(datetime.datetime.fromisoformat(close)-datetime.datetime.now(datetime.timezone.utc)).total_seconds())+.1)
-native('POST','/checkin-api/v1/submit',{'media_id':photo['media_id'],'revision':1,'op_id':'cross-cutoff-test','note':''},410,opener=cookies)
+native('POST','/checkin-api/v1/submit',{'media_id':photo['media_id'],'revision':1,'op_id':'cross-cutoff-test','note':''},410,opener=cookies,headers=late_headers)
 # Invalid payloads and cross-origin browser writes fail closed.
 native('POST','/checkin-api/v1/exchange',{'token':token},403,headers={'Origin':'https://untrusted.invalid'})
 request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':False})
@@ -144,6 +146,7 @@ native('GET','/checkin-api/v1/sync/media/'+record['media_id'],expected=404,heade
 request('DELETE',path+'/pairing/'+pairing['id'])
 native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
 worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
+assert faults=={'fail_status':0,'drop_status':0},'outbox response-loss fixture was not exercised'
 (ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
 
 # Load the independent extension inside the unchanged official Paca web app.
