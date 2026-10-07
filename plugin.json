@@ -1,7 +1,7 @@
 {
   "id": "com.selfcommand.task-checkin",
   "displayName": "任务拍照打卡",
-  "description": "Independent photo check-in windows, durable task status updates and scoped Obsidian synchronization.",
+  "description": "为任务提供拍照打卡、状态更新与 Obsidian 同步。",
   "version": "0.1.0",
   "minCoreVersion": "v0.18.6",
   "permissions": [
@@ -22,7 +22,7 @@
     },
     {
       "key": "task_checkin.worker_manage",
-      "label": "管理打卡 worker 凭据",
+      "label": "管理打卡 服务连接",
       "scope": "global"
     }
   ],
