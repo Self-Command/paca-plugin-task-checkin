@@ -1,0 +1,37 @@
+services:
+  checkin-worker:
+    image: ${CHECKIN_WORKER_IMAGE:?Set a successful Action image digest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - '127.0.0.1:18789:8090'
+    environment:
+      PACA_API_URL: http://api:8080
+      PUBLIC_URL: ${PUBLIC_URL:?HTTPS public origin}
+      DATABASE_URL: ${CHECKIN_DATABASE_URL:?Dedicated plugin C schema role}
+      CHECKIN_S3_ENDPOINT: http://rustfs:9000
+      CHECKIN_BUCKET: ${CHECKIN_BUCKET:?Independent private bucket}
+      PACA_API_KEY_FILE: /run/secrets/paca_api_key
+      WORKER_SECRET_FILE: /run/secrets/worker_secret
+      GRANT_SECRET_FILE: /run/secrets/grant_secret
+      ACTION_SECRET_FILE: /run/secrets/action_secret
+      STORAGE_ACCESS_KEY_FILE: /run/secrets/storage_access
+      STORAGE_SECRET_KEY_FILE: /run/secrets/storage_secret
+    volumes:
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-api-key:/run/secrets/paca_api_key:ro
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-worker-secret:/run/secrets/worker_secret:ro
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-grant-secret:/run/secrets/grant_secret:ro
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-action-secret:/run/secrets/action_secret:ro
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-storage-access:/run/secrets/storage_access:ro
+      - ${PACA_DEPLOY_ROOT:?}/secrets/checkin-storage-secret:/run/secrets/storage_secret:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384M

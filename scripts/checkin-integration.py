@@ -14,7 +14,7 @@ secret_dir=ROOT/'ci-secrets';secret_dir.mkdir(mode=0o700,exist_ok=True)
 values={'api-key':key,'worker-secret':worker_secret,'grant-secret':secrets.token_hex(32),'action-secret':secrets.token_hex(32),'storage-access':'ci-access-key','storage-secret':'ci-secret-key'}
 for name,value in values.items():
     f=secret_dir/name;f.write_text(value);f.chmod(0o600)
-worker_env={**os.environ,'PACA_API_URL':'http://localhost:18080','PUBLIC_URL':'http://127.0.0.1:18082','DATABASE_URL':'postgres://postgres:ci-only-password@127.0.0.1:15432/paca?sslmode=disable','CHECKIN_TEST_MODE':'true','CHECKIN_BUCKET':'checkin-private','CHECKIN_S3_ENDPOINT':'http://127.0.0.1:19000','CHECKIN_WEB_DIR':str(ROOT/'frontend/web-dist')}
+worker_env={**os.environ,'PACA_API_URL':'http://localhost:18080','PUBLIC_URL':'http://127.0.0.1:18082','DATABASE_URL':'postgres://postgres:ci-only-password@127.0.0.1:15432/paca?sslmode=disable','CHECKIN_TEST_MODE':'true','LISTEN_ADDR':'127.0.0.1:18082','CHECKIN_BUCKET':'checkin-private','CHECKIN_S3_ENDPOINT':'http://127.0.0.1:19000','CHECKIN_WEB_DIR':str(ROOT/'frontend/web-dist')}
 for env_name,file_name in [('PACA_API_KEY','api-key'),('WORKER_SECRET','worker-secret'),('GRANT_SECRET','grant-secret'),('ACTION_SECRET','action-secret'),('STORAGE_ACCESS_KEY','storage-access'),('STORAGE_SECRET_KEY','storage-secret')]:worker_env[env_name+'_FILE']=str(secret_dir/file_name)
 # The compatibility job builds the web output again from the same checkout.
 subprocess.run(['bun','install','--frozen-lockfile'],cwd=ROOT/'frontend',check=True)
@@ -50,7 +50,9 @@ end_action=action('due',due)
 start_action=action('start',start)
 assert end_action['instance_id']==start_action['instance_id']
 assert action('due',due)['metadata']==end_action['metadata'],'retry changed authorization snapshot'
-png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+import struct,zlib
+def chunk(kind,data):return struct.pack('!I',len(data))+kind+data+struct.pack('!I',zlib.crc32(kind+data)&0xffffffff)
+png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',1,1,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b'\x00\xff\x00\x00'))+chunk(b'IEND',b'')
 # Browser navigates the passwordless fragment link and uses the real UI upload/submit.
 with sync_playwright() as pw:
     browser=pw.chromium.launch()
