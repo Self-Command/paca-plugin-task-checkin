@@ -254,12 +254,13 @@ func (w *Worker) view(out http.ResponseWriter, r *http.Request) {
 	}
 	var now time.Time
 	_ = w.DB.QueryRow(r.Context(), "SELECT clock_timestamp()").Scan(&now)
-	open, close, _ := i.Window(s.Kind)
+	cfg,configErr:=w.config(r.Context(),i.Project);if configErr!=nil{fail(out,503,"project settings unavailable");return}
+ open, close, _ := i.Window(s.Kind)
 	var record json.RawMessage
 	err = w.DB.QueryRow(r.Context(), "SELECT jsonb_build_object('id',id,'media_id',media_id,'note',note,'submitted_at',submitted_at,'status',status) FROM records WHERE instance_id=$1 AND kind=$2", i.ID, s.Kind).Scan(&record)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		fail(out, 503, "record unavailable")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
+	writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind,"timezone":cfg.Timezone, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
 }

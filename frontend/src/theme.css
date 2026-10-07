@@ -10,3 +10,5 @@
 .dark .checkin-ui{--background:#161618;--foreground:#f5f5f7;--card:#232326;--primary:#2997ff;--secondary:#333336;--muted:#aaaab0;--border:#414145}
 @media(prefers-color-scheme:dark){.checkin-ui{--background:#161618;--foreground:#f5f5f7;--card:#232326;--primary:#2997ff;--secondary:#333336;--muted:#aaaab0;--border:#414145}}
 .checkin-ui button{cursor:pointer}.checkin-ui button:disabled{cursor:default}.checkin-ui img{max-width:100%}
+
+.checkin-ui h1{font:inherit}.checkin-ui h2{font:inherit}

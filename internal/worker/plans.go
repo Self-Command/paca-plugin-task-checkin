@@ -50,16 +50,16 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 	if err = w.call(ctx, "GET", "/projects/"+project+"/task-statuses", nil, &statuses); err != nil {
 		return model.Instance{}, err
 	}
-	valid := map[string]bool{}
+	valid := map[string]bool{};categories:=map[string]string{}
 	done := false
 	for _, status := range statuses.Items {
-		valid[status.ID] = true
+		valid[status.ID] = true;categories[status.ID]=status.Category
 		if status.ID == task.Status && status.Category == "done" {
 			done = true
 		}
 	}
-	if !valid[c.ProgressStatus] || !valid[c.DoneStatus] || !valid[c.ArchiveStatus] {
-		return model.Instance{}, errors.New("configured states do not belong to project")
+	if !valid[c.ProgressStatus] || !valid[c.DoneStatus] || !valid[c.ArchiveStatus] || categories[c.ProgressStatus]!="inprogress" || categories[c.DoneStatus]!="done" || categories[c.ArchiveStatus]!="done" {
+		return model.Instance{}, errors.New("configure project in-progress, done and archive states with matching categories")
 	}
 	meta, _ := task.Custom["_integration_state_v1"].(map[string]any)
 	blocked := task.Status == c.ArchiveStatus || meta["archived"] == true || meta["recurring"] == true

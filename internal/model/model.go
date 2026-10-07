@@ -33,7 +33,8 @@ func (c Config) Valid() bool {
 	if c.StartMinutes < 1 || c.StartMinutes > 1440 || c.DueMinutes < 1 || c.DueMinutes > 1440 || c.RetentionDays < 1 || c.RetentionDays > 3650 {
 		return false
 	}
-	if c.Enabled && (!UUID.MatchString(c.ProgressStatus) || !UUID.MatchString(c.DoneStatus) || !UUID.MatchString(c.ArchiveStatus)) {
+	if c.Enabled&&(c.ProgressStatus==c.DoneStatus||c.ProgressStatus==c.ArchiveStatus||c.DoneStatus==c.ArchiveStatus){return false}
+ if c.Enabled && (!UUID.MatchString(c.ProgressStatus) || !UUID.MatchString(c.DoneStatus) || !UUID.MatchString(c.ArchiveStatus)) {
 		return false
 	}
 	return true

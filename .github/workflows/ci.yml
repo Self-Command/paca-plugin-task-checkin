@@ -95,7 +95,7 @@ jobs:
       - name: Browser runtime
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb libnss3 libasound2t64
+          sudo apt-get install -y xvfb libnss3 libasound2t64 fonts-noto-cjk
           pip install playwright==1.55.0 boto3==1.40.0
           playwright install --with-deps chromium
       - name: Official Paca integration

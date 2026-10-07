@@ -14,7 +14,25 @@ secret_dir=ROOT/'ci-secrets';secret_dir.mkdir(mode=0o700,exist_ok=True)
 values={'api-key':key,'worker-secret':worker_secret,'grant-secret':secrets.token_hex(32),'action-secret':secrets.token_hex(32),'storage-access':'ci-access-key','storage-secret':'ci-secret-key'}
 for name,value in values.items():
     f=secret_dir/name;f.write_text(value);f.chmod(0o600)
-worker_env={**os.environ,'PACA_API_URL':'http://localhost:18080','PUBLIC_URL':'http://127.0.0.1:18082','DATABASE_URL':'postgres://postgres:ci-only-password@127.0.0.1:15432/paca?sslmode=disable','CHECKIN_TEST_MODE':'true','LISTEN_ADDR':'127.0.0.1:18082','CHECKIN_BUCKET':'checkin-private','CHECKIN_S3_ENDPOINT':'http://127.0.0.1:19000','CHECKIN_WEB_DIR':str(ROOT/'frontend/web-dist')}
+from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
+faults={'fail_status':1,'drop_status':1}
+class FaultProxy(BaseHTTPRequestHandler):
+    def log_message(self,*args):pass
+    def forward(self):
+        body=self.rfile.read(int(self.headers.get('Content-Length','0'))) or None
+        status_patch=self.command=='PATCH' and '/tasks/' in self.path
+        if status_patch and faults['fail_status']:
+            faults['fail_status']-=1;self.send_response(503);self.end_headers();self.wfile.write(b'{"error":"injected CI status outage"}');return
+        req=urllib.request.Request('http://localhost:18080'+self.path,data=body,method=self.command,headers={k:v for k,v in self.headers.items() if k.lower() not in ('host','content-length','connection')})
+        try:
+            with urllib.request.urlopen(req,timeout=20) as result:status,payload=result.status,result.read()
+        except urllib.error.HTTPError as error:status,payload=error.code,error.read()
+        if status_patch and faults['drop_status']:
+            faults['drop_status']-=1;self.close_connection=True;return
+        self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload)
+    do_GET=forward;do_POST=forward;do_PUT=forward;do_PATCH=forward;do_DELETE=forward
+proxy=ThreadingHTTPServer(('127.0.0.1',18180),FaultProxy);threading.Thread(target=proxy.serve_forever,daemon=True).start()
+worker_env={**os.environ,'PACA_API_URL':'http://127.0.0.1:18180','PUBLIC_URL':'http://127.0.0.1:18082','DATABASE_URL':'postgres://postgres:ci-only-password@127.0.0.1:15432/paca?sslmode=disable','CHECKIN_TEST_MODE':'true','LISTEN_ADDR':'127.0.0.1:18082','CHECKIN_BUCKET':'checkin-private','CHECKIN_S3_ENDPOINT':'http://127.0.0.1:19000','CHECKIN_WEB_DIR':str(ROOT/'frontend/web-dist')}
 for env_name,file_name in [('PACA_API_KEY','api-key'),('WORKER_SECRET','worker-secret'),('GRANT_SECRET','grant-secret'),('ACTION_SECRET','action-secret'),('STORAGE_ACCESS_KEY','storage-access'),('STORAGE_SECRET_KEY','storage-secret')]:worker_env[env_name+'_FILE']=str(secret_dir/file_name)
 # The compatibility job builds the web output again from the same checkout.
 subprocess.run(['bun','install','--frozen-lockfile'],cwd=ROOT/'frontend',check=True)
@@ -66,6 +84,11 @@ with sync_playwright() as pw:
         page.get_by_role('button',name='确认打卡',exact=True).click()
     expect(page.get_by_role('status').filter(has_text='打卡成功')).to_be_visible(timeout=30000)
     (ROOT/'verification').mkdir(exist_ok=True);page.screenshot(path=str(ROOT/'verification/checkin-mobile.png'),full_page=True)
+    # A failed status PATCH preserves the successful card. Accelerate only the isolated
+    # retry timer; the real worker still dispatches the durable outbox via official API.
+    time.sleep(6)
+    assert faults['fail_status']==0,'status failure fixture was not exercised'
+    cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',"UPDATE plugin_data_com_selfcommand_task_checkin.outbox SET next_attempt=NOW() WHERE state='pending'")
     # End succeeds first; start is still independently authorized after Paca is done.
     for _ in range(12):
         current=request('GET',f'/projects/{project["id"]}/tasks/{task["id"]}')['data']
@@ -113,8 +136,15 @@ for _ in range(30):
     try:native('GET','/healthz');break
     except Exception:time.sleep(.5)
 assert len(request('GET',path+'/records')['items'])==2,'restart lost or duplicated a card'
-worker.terminate();worker.wait(timeout=10);log.close()
-(ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'real_device':False},indent=2))
+# Pairing is restricted to its declared source connection; unrelated media is denied.
+pairing=request('POST',path+'/pairing',{'name':'scoped device','connection_id':'11111111-1111-4111-8111-111111111111'},201)
+paired={'Authorization':'Bearer '+pairing['token']}
+assert native('GET','/checkin-api/v1/sync/changes?after=0',headers=paired)['items']==[]
+native('GET','/checkin-api/v1/sync/media/'+record['media_id'],expected=404,headers=paired)
+request('DELETE',path+'/pairing/'+pairing['id'])
+native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
+worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
+(ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
 
 # Load the independent extension inside the unchanged official Paca web app.
 (ROOT/'ci.Caddyfile').write_text(':80 {\n handle /api/* {\n reverse_proxy paca-ci-api:8080\n }\n handle_path /plugins/* {\n root * /var/www/plugins\n file_server\n }\n handle {\n reverse_proxy paca-ci-web:3000\n }\n}\n')
