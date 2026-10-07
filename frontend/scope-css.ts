@@ -1,0 +1,3 @@
+import postcss from "postcss";import type {Plugin} from "vite";
+/** Scope generated utility CSS to the plugin so it cannot alter the official host layout. */
+export function scopePluginCss():Plugin {return {name:"scoped-plugin-components",enforce:"post",generateBundle(_options,bundle){for(const asset of Object.values(bundle)){if(asset.type!=="asset"||!asset.fileName.endsWith(".css"))continue;const root=postcss.parse(String(asset.source));root.walkRules(rule=>{if(rule.parent?.type==="atrule"&&/keyframes/.test(rule.parent.name))return;rule.selectors=rule.selectors.map(selector=>{if(selector.includes(".checkin-ui"))return selector;if(selector===":root"||selector===":host")return ".checkin-ui";return `.checkin-ui ${selector}`})});asset.source=root.toString()}}}}
