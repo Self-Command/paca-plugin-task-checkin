@@ -33,10 +33,10 @@ func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 	}
 	i, err := w.prepare(r.Context(), input.Project, input.Task)
 	if err != nil {
-        if err.Error() == "task is not eligible for check-in" {
-            writeJSON(out, 200, map[string]any{"enabled": false})
-            return
-        }
+		if err.Error() == "task is not eligible for check-in" {
+			writeJSON(out, 200, map[string]any{"enabled": false})
+			return
+		}
 		fail(out, 409, err.Error())
 		return
 	}
