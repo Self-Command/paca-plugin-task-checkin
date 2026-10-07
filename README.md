@@ -19,6 +19,8 @@
 3. 使用仅加入目标项目的专用 Paca 服务账号，授予任务读写、状态读取和接入插件 source-link 读取权限，创建 API key。不要把生产管理员 key 用作常驻 worker key。
 4. 通过插件管理凭据接口创建 worker secret，分别在运行时挂载 API key、worker secret、grant secret、internal action secret、S3 凭据文件。grant/action secret 分开、随机不少于 32 字节；不填入网页、镜像或插件 JSON。
 5. 对象存储使用独立私有 bucket 和 `checkin/<project>/<instance>/` 前缀，仅为 worker 授权。部署 `deploy/compose.checkin.yaml` overlay，镜像引用锁定 digest，合并 `deploy/nginx-checkin.conf` 到现有 HTTPS server。内部接口只在受控容器网络访问。
+
+打卡页面和照片响应采用流式反代，避免慢速客户端触发 Nginx 的共享临时文件目录权限问题。静态页面的 JavaScript/CSS 启用 gzip；授权接口和照片不使用这个压缩设置。配置检查由 GitHub Actions 在不可写的临时目录下验证完整响应及压缩结果。当前页面、资源和私有接口仍返回 `Cache-Control: no-store`，每次进入会重新获取页面资源；这与代理临时文件缓冲是不同机制，禁止将私有授权或任务响应改为公共缓存。
 6. 在项目设置绑定进行中、完成、归档的实际 UUID，再启用。任务详情可确认精确时间和覆盖提前分钟数。日期字段与精确时刻分别保存；时间不完整不安排窗口。
 
 ## 授权与同步接口

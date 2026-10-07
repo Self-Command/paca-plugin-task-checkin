@@ -1,0 +1,31 @@
+name: Check Nginx deployment configuration
+on:
+  push:
+    paths:
+      - deploy/nginx-checkin.conf
+      - scripts/nginx-smoke.py
+      - .github/workflows/nginx.yml
+  pull_request:
+    paths:
+      - deploy/nginx-checkin.conf
+      - scripts/nginx-smoke.py
+      - .github/workflows/nginx.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nginx:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nginx
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx
+      - name: Verify streaming and compression
+        run: python3 scripts/nginx-smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nginx-verification
+          path: verification/nginx-report.json
