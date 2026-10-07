@@ -105,6 +105,11 @@ jobs:
           go build -trimpath -o /tmp/checkin-worker ./cmd/worker
           go mod tidy
           python3 scripts/host-smoke.py
+      - name: Collect worker evidence
+        if: always()
+        run: |
+          mkdir -p verification
+          test ! -f worker-test.log || cp worker-test.log verification/
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -205,16 +205,12 @@ func (w *Worker) saveConflict(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "randomness unavailable")
 		return
 	}
-	result, err := w.DB.Exec(r.Context(), "INSERT INTO conflicts(id,device_id,instance_id,base_revision,local) SELECT $1,$2,i.id,$4,$5::jsonb FROM instances i WHERE i.id=$3 AND i.project_id=$6 AND i.status_revision=$4", id, d.ID, input.Instance, input.Revision, string(raw), d.Project)
-	if err != nil {
-		fail(out, 503, "conflict save failed")
-		return
-	}
-	if result.RowsAffected() != 1 {
-		fail(out, 409, "instance revision changed")
-		return
-	}
-	writeJSON(out, 201, map[string]any{"id": id})
+	var storedID string;var stored []byte
+ err=w.DB.QueryRow(r.Context(),"INSERT INTO conflicts(id,device_id,instance_id,base_revision,local) SELECT $1,$2,i.id,$4,$5::jsonb FROM instances i WHERE i.id=$3 AND i.project_id=$6 AND i.status_revision=$4 ON CONFLICT(device_id,instance_id,base_revision) DO UPDATE SET id=conflicts.id RETURNING id::text,local",id,d.ID,input.Instance,input.Revision,string(raw),d.Project).Scan(&storedID,&stored)
+ if err!=nil{fail(out,409,"instance changed or conflict unavailable");return}
+ var prior any;_ =json.Unmarshal(stored,&prior)
+ if model.Hash(prior)!=model.Hash(input.Local){fail(out,409,"local conflict changed; refresh first");return}
+ writeJSON(out,201,map[string]any{"id":storedID})
 }
 func (w *Worker) resolveConflict(out http.ResponseWriter, r *http.Request) {
 	d, err := w.device(r.Context(), r)
@@ -274,7 +270,8 @@ func (w *Worker) resolveConflict(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if state != "open" {
-		writeJSON(out, 200, map[string]any{"resolved": true})
+  if state!="resolved_"+input.Keep{fail(out,409,"conflict already resolved with a different choice");return}
+		writeJSON(out, 200, map[string]any{"resolved": true,"keep":input.Keep,"revision":revision})
 		return
 	}
 	if revision != input.Revision {

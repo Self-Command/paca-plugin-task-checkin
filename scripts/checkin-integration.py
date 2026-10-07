@@ -58,6 +58,7 @@ with sync_playwright() as pw:
     browser=pw.chromium.launch()
     context=browser.new_context(viewport={'width':390,'height':844})
     page=context.new_page();page.on('pageerror',lambda error:print('browser error:',error));page.goto(end_action['metadata']['action_url'],wait_until='networkidle')
+    (ROOT/'verification').mkdir(exist_ok=True);page.screenshot(path=str(ROOT/'verification/checkin-initial.png'),full_page=True)
     expect(page.get_by_role('heading',name='独立双卡验收')).to_be_visible()
     assert not page.url.split('#')[-1].startswith('token=')
     page.locator('input[type=file]').last.set_input_files({'name':'check.png','mimeType':'image/png','buffer':png})
@@ -114,3 +115,18 @@ for _ in range(30):
 assert len(request('GET',path+'/records')['items'])==2,'restart lost or duplicated a card'
 worker.terminate();worker.wait(timeout=10);log.close()
 (ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'real_device':False},indent=2))
+
+# Load the independent extension inside the unchanged official Paca web app.
+(ROOT/'ci.Caddyfile').write_text(':80 {\n handle /api/* {\n reverse_proxy paca-ci-api:8080\n }\n handle_path /plugins/* {\n root * /var/www/plugins\n file_server\n }\n handle {\n reverse_proxy paca-ci-web:3000\n }\n}\n')
+cmd('docker','run','-d','--name','paca-ci-web','--network','paca-ci','pacaai/paca-web@sha256:c65dc2fa6384be8bbafdda9a220d525d54c730f63f2a0e0b4c167c7bb9452995')
+cmd('docker','run','-d','--name','paca-ci-caddy','--network','paca-ci','-p','127.0.0.1:18081:80','-v',f'{ROOT}/ci.Caddyfile:/etc/caddy/Caddyfile:ro','-v',f'{ROOT}/release/frontend:/var/www/plugins:ro','caddy:2-alpine')
+with sync_playwright() as pw:
+    browser=pw.chromium.launch();context=browser.new_context(viewport={'width':1280,'height':900})
+    response=context.request.post('http://127.0.0.1:18081/api/v1/auth/login',data={'username':'admin','password':new_password});assert response.ok
+    page=context.new_page();page.goto(f'http://127.0.0.1:18081/projects/{project["id"]}/settings/',wait_until='domcontentloaded')
+    page.get_by_role('button',name=manifest['displayName'],exact=True).last.click(timeout=45000)
+    expect(page.get_by_label('时区',exact=True)).to_have_value('Asia/Shanghai',timeout=30000)
+    page.get_by_role('button',name='保存设置',exact=True).click()
+    expect(page.get_by_role('status').filter(has_text='设置已保存')).to_be_visible()
+    page.screenshot(path=str(ROOT/'verification/paca-settings.png'),full_page=True)
+    context.close();browser.close()

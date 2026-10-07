@@ -96,12 +96,21 @@ func (w *Worker) upload(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	object := "checkin/" + i.Project + "/" + i.ID + "/" + id + ".jpg"
- // Store cleanup intent before uploading. A crash cannot orphan an untracked object.
- _,err=w.DB.Exec(r.Context(),"INSERT INTO media(id,instance_id,kind,object_key,sha256,bytes,mime,state) VALUES($1,$2,$3,$4,$5,$6,'image/jpeg','uploading')",id,i.ID,s.Kind,object,tokenHash(string(photo)),len(photo))
- if err!=nil{fail(out,503,"photo upload intent failed");return}
- _,err=w.Objects.PutObject(r.Context(),w.Bucket,object,bytes.NewReader(photo),int64(len(photo)),minio.PutObjectOptions{ContentType:"image/jpeg"})
- if err!=nil{fail(out,503,"photo storage unavailable");return}
- if _,err=w.DB.Exec(r.Context(),"UPDATE media SET state='temporary' WHERE id=$1 AND state='uploading'",id);err!=nil{fail(out,503,"photo receipt save failed");return}
+	// Store cleanup intent before uploading. A crash cannot orphan an untracked object.
+	_, err = w.DB.Exec(r.Context(), "INSERT INTO media(id,instance_id,kind,object_key,sha256,bytes,mime,state) VALUES($1,$2,$3,$4,$5,$6,'image/jpeg','uploading')", id, i.ID, s.Kind, object, tokenHash(string(photo)), len(photo))
+	if err != nil {
+		fail(out, 503, "photo upload intent failed")
+		return
+	}
+	_, err = w.Objects.PutObject(r.Context(), w.Bucket, object, bytes.NewReader(photo), int64(len(photo)), minio.PutObjectOptions{ContentType: "image/jpeg"})
+	if err != nil {
+		fail(out, 503, "photo storage unavailable")
+		return
+	}
+	if _, err = w.DB.Exec(r.Context(), "UPDATE media SET state='temporary' WHERE id=$1 AND state='uploading'", id); err != nil {
+		fail(out, 503, "photo receipt save failed")
+		return
+	}
 	writeJSON(out, 201, map[string]any{"media_id": id, "sha256": tokenHash(string(photo)), "bytes": len(photo), "mime": "image/jpeg"})
 }
 func (w *Worker) submit(out http.ResponseWriter, r *http.Request) {
