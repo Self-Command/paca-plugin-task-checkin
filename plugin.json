@@ -1,0 +1,247 @@
+{
+  "id": "com.selfcommand.task-checkin",
+  "displayName": "任务拍照打卡",
+  "description": "Independent photo check-in windows, durable task status updates and scoped Obsidian synchronization.",
+  "version": "0.1.0",
+  "minCoreVersion": "v0.18.6",
+  "permissions": [
+    "db.read",
+    "db.write",
+    "events.subscribe"
+  ],
+  "customPermissions": [
+    {
+      "key": "task_checkin.read",
+      "label": "查看打卡设置与记录",
+      "scope": "project"
+    },
+    {
+      "key": "task_checkin.manage",
+      "label": "管理打卡窗口与配对",
+      "scope": "project"
+    },
+    {
+      "key": "task_checkin.worker_manage",
+      "label": "管理打卡 worker 凭据",
+      "scope": "global"
+    }
+  ],
+  "backend": {
+    "allowedConfigKeys": [
+      "ENCRYPTION_KEY",
+      "PUBLIC_URL"
+    ],
+    "eventSubscriptions": [
+      "task.created",
+      "task.updated",
+      "task.deleted"
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/health",
+        "public": true
+      },
+      {
+        "method": "GET",
+        "path": "/worker/control",
+        "public": true
+      },
+      {
+        "method": "POST",
+        "path": "/admin/worker-credential",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "global",
+            "permissions": [
+              "task_checkin.worker_manage"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/settings",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.read"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "PUT",
+        "path": "/projects/:projectId/settings",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/tasks/:taskId/checkin",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.read"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "PUT",
+        "path": "/projects/:projectId/tasks/:taskId/checkin",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "POST",
+        "path": "/projects/:projectId/tasks/:taskId/cancel",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/records",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.read"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "POST",
+        "path": "/projects/:projectId/pairing",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "DELETE",
+        "path": "/projects/:projectId/pairing/:id",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
+      }
+    ],
+    "sensitiveFields": {
+      "worker_settings": [
+        "secret_enc"
+      ]
+    }
+  },
+  "frontend": {
+    "remoteEntryUrl": "/plugins/com.selfcommand.task-checkin/assets/remoteEntry.js",
+    "extensionPoints": [
+      {
+        "point": "project.settings.tab",
+        "component": "SettingsTab",
+        "label": "任务拍照打卡",
+        "order": 140,
+        "requiredPermission": "task_checkin.read"
+      },
+      {
+        "point": "task.detail.section",
+        "component": "CheckinSection",
+        "label": "拍照打卡",
+        "order": 130,
+        "requiredPermission": "task_checkin.read"
+      }
+    ]
+  }
+}

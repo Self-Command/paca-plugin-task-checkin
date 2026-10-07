@@ -1,0 +1,172 @@
+name: Build, verify and publish
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Go checks
+        run: |
+          printf 'package buildinfo\nfunc init() { SourceSHA = "%s" }\n' "$GITHUB_SHA" > internal/buildinfo/stamp.go
+          if [ "$GITHUB_REF_TYPE" = tag ]; then test "$GITHUB_REF_NAME" = "v$(jq -r .version plugin.json)"; fi
+          go mod tidy
+          gofmt -w backend cmd internal
+          git diff -- backend cmd internal go.mod go.sum > gofmt.patch
+          python3 -m py_compile scripts/*.py
+          go vet ./...
+          go test -race ./...
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: formatting-patch
+          path: gofmt.patch
+      - name: TinyGo WASM
+        run: |
+          curl --fail --location --retry 3 https://github.com/tinygo-org/tinygo/releases/download/v0.41.1/tinygo_0.41.1_amd64.deb -o /tmp/tinygo.deb
+          sudo dpkg -i /tmp/tinygo.deb
+          id=$(jq -r .id plugin.json)
+          mkdir -p release/wasm/$id/migrations
+          tinygo build -target=wasip1 -buildmode=c-shared -o release/wasm/$id/backend.wasm ./backend
+          python3 scripts/stamp-manifest.py
+          cp backend/migrations/*.sql release/wasm/$id/migrations/
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+      - name: Frontend typecheck and build
+        working-directory: frontend
+        run: |
+          bun install
+          git diff -- bun.lock > ../frontend-lock.patch
+          bun run typecheck
+          bun run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-lock-patch
+          path: frontend-lock.patch
+      - name: Package
+        run: |
+          id=$(jq -r .id plugin.json)
+          mkdir -p release/frontend/$id release/assets
+          cp -R frontend/dist/. release/frontend/$id/
+          tar -czf release/assets/backend-wasm.tar.gz -C release/wasm/$id backend.wasm
+          tar -czf release/assets/frontend-dist.tar.gz -C frontend dist
+          tar -czf release/assets/migrations.tar.gz -C backend migrations
+          tar -czf release/assets/plugin-manifest.tar.gz -C release/wasm/$id plugin.json
+          tar -czf release/assets/plugin-install.tar.gz -C release wasm frontend
+          jq --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" '. + {source_sha:$sha,action_run:$run}' release/wasm/$id/plugin.json > release/assets/build-info.json
+          cd release/assets
+          sha256sum *.tar.gz build-info.json > checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-build
+          path: release/
+      - name: Strict formatting
+        run: git diff --exit-code -- backend cmd internal go.mod go.sum
+  compatibility:
+    needs: build
+    if: always() && needs.build.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.0'
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-build
+          path: release/
+      - name: Browser runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb libnss3 libasound2t64
+          pip install playwright==1.55.0 boto3==1.40.0
+          playwright install --with-deps chromium
+      - name: Official Paca integration
+        run: |
+          printf 'package buildinfo\nfunc init() { SourceSHA = "%s" }\n' "$GITHUB_SHA" > internal/buildinfo/stamp.go
+          go mod tidy
+          go build -trimpath -o /tmp/checkin-worker ./cmd/worker
+          go mod tidy
+          python3 scripts/host-smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: host-verification
+          path: verification/
+      - name: Diagnostics
+        if: failure()
+        run: docker logs paca-ci-api --tail 100 || true
+  publish:
+    needs: [build, compatibility]
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: plugin-build
+          path: release/
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Worker image
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: SOURCE_SHA=${{ github.sha }}
+          tags: ghcr.io/self-command/${{ github.event.repository.name }}-worker:sha-${{ github.sha }}
+      - name: Published worker architecture smoke tests
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          image="ghcr.io/self-command/${GITHUB_REPOSITORY#*/}-worker@$IMAGE_DIGEST"
+          manifest=$(docker buildx imagetools inspect "$image" --raw)
+          for arch in amd64 arm64; do
+            child=$(echo "$manifest" | jq -er --arg arch "$arch" '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$arch) | .digest')
+            docker run --rm --platform "linux/$arch" "${image%@*}@$child" --version | jq --exit-status --arg sha "$GITHUB_SHA" '.source_sha == $sha'
+          done
+      - uses: actions/download-artifact@v4
+        with:
+          name: host-verification
+          path: host-verification/
+      - name: Verification reports
+        run: cp host-verification/*report.json release/assets/
+      - name: Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          printf '%s\n' "ghcr.io/self-command/${GITHUB_REPOSITORY#*/}-worker@$IMAGE_DIGEST" > release/assets/image-digest.txt
+          (cd release/assets && sha256sum *.tar.gz *.json image-digest.txt > checksums.txt)
+          tag="v0.1.0-dev.${GITHUB_RUN_NUMBER}"
+          flags="--prerelease"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then tag="$GITHUB_REF_NAME"; flags=""; fi
+          printf '%s\n' 'Independent photo check-in candidate; review host verification report before deployment.' "Source: $GITHUB_SHA" "Worker: $IMAGE_DIGEST" > /tmp/notes.md
+          gh release create "$tag" release/assets/* --target "$GITHUB_SHA" --title "$tag" $flags --notes-file /tmp/notes.md

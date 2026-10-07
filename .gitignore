@@ -1,0 +1,10 @@
+/release/
+/frontend/node_modules/
+/frontend/dist/
+.env
+.env.*
+!.env.example
+/secrets/
+/data/
+*.log
+internal/buildinfo/stamp.go
