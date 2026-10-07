@@ -63,7 +63,7 @@ func (w *Worker) upload(out http.ResponseWriter, r *http.Request) {
 	}
 	i, err := w.prepare(r.Context(), s.Instance.Project, s.Instance.Task)
 	if err != nil || i.ID != s.Instance.ID {
-		fail(out, 410, "instance changed or cancelled")
+		fail(out, prepareStatus(err), "instance changed, cancelled or temporarily unavailable")
 		return
 	}
 	var now time.Time
@@ -96,17 +96,12 @@ func (w *Worker) upload(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	object := "checkin/" + i.Project + "/" + i.ID + "/" + id + ".jpg"
-	_, err = w.Objects.PutObject(r.Context(), w.Bucket, object, bytes.NewReader(photo), int64(len(photo)), minio.PutObjectOptions{ContentType: "image/jpeg"})
-	if err != nil {
-		fail(out, 503, "photo storage unavailable")
-		return
-	}
-	_, err = w.DB.Exec(r.Context(), "INSERT INTO media(id,instance_id,kind,object_key,sha256,bytes,mime) VALUES($1,$2,$3,$4,$5,$6,'image/jpeg')", id, i.ID, s.Kind, object, tokenHash(string(photo)), len(photo))
-	if err != nil {
-		_ = w.Objects.RemoveObject(r.Context(), w.Bucket, object, minio.RemoveObjectOptions{})
-		fail(out, 503, "photo receipt save failed")
-		return
-	}
+ // Store cleanup intent before uploading. A crash cannot orphan an untracked object.
+ _,err=w.DB.Exec(r.Context(),"INSERT INTO media(id,instance_id,kind,object_key,sha256,bytes,mime,state) VALUES($1,$2,$3,$4,$5,$6,'image/jpeg','uploading')",id,i.ID,s.Kind,object,tokenHash(string(photo)),len(photo))
+ if err!=nil{fail(out,503,"photo upload intent failed");return}
+ _,err=w.Objects.PutObject(r.Context(),w.Bucket,object,bytes.NewReader(photo),int64(len(photo)),minio.PutObjectOptions{ContentType:"image/jpeg"})
+ if err!=nil{fail(out,503,"photo storage unavailable");return}
+ if _,err=w.DB.Exec(r.Context(),"UPDATE media SET state='temporary' WHERE id=$1 AND state='uploading'",id);err!=nil{fail(out,503,"photo receipt save failed");return}
 	writeJSON(out, 201, map[string]any{"media_id": id, "sha256": tokenHash(string(photo)), "bytes": len(photo), "mime": "image/jpeg"})
 }
 func (w *Worker) submit(out http.ResponseWriter, r *http.Request) {
@@ -130,7 +125,7 @@ func (w *Worker) submit(out http.ResponseWriter, r *http.Request) {
 	}
 	i, err := w.prepare(r.Context(), s.Instance.Project, s.Instance.Task)
 	if err != nil || i.ID != s.Instance.ID {
-		fail(out, 410, "task or instance changed")
+		fail(out, prepareStatus(err), "task changed or temporarily unavailable")
 		return
 	}
 	cfg, err := w.config(r.Context(), i.Project)

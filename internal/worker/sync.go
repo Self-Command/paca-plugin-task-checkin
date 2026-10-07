@@ -131,8 +131,11 @@ func (w *Worker) prepareReceipt(out http.ResponseWriter, r *http.Request) {
 	}
 	var payload map[string]any
 	_ = json.Unmarshal(raw, &payload)
-	if number,ok:=payload["revision"].(float64);!ok||int(number)!=current{fail(out,409,"stale record may sync photos only; pull latest state");return}
- source, _ := payload["source"].(map[string]any)
+	if number, ok := payload["revision"].(float64); !ok || int(number) != current {
+		fail(out, 409, "stale record may sync photos only; pull latest state")
+		return
+	}
+	source, _ := payload["source"].(map[string]any)
 	expected := map[string]any{"source_ref": source["source_ref"], "tasknotes_status": input.Status, "base_status": input.BaseStatus, "path": input.Path, "revision": current, "instance_id": payload["instance_id"], "details_sha256": input.DetailsHash}
 	body, _ := json.Marshal(expected)
 	id, err := randomID()
@@ -284,7 +287,10 @@ func (w *Worker) resolveConflict(out http.ResponseWriter, r *http.Request) {
 			fail(out, 503, "revision update failed")
 			return
 		}
-        if _,err=tx.Exec(r.Context(),"INSERT INTO changes(project_id,connection_id,instance_id,record_id,revision,payload) SELECT project_id,connection_id,instance_id,record_id,$2,payload||jsonb_build_object('revision',$2,'logical_status','mapped','paca_status_id',$3::text) FROM changes WHERE instance_id=$1 ORDER BY cursor DESC LIMIT 1",instance,revision,input.StatusID);err!=nil{fail(out,503,"resolution sync change failed");return}
+		if _, err = tx.Exec(r.Context(), "INSERT INTO changes(project_id,connection_id,instance_id,record_id,revision,payload) SELECT project_id,connection_id,instance_id,record_id,$2,payload||jsonb_build_object('revision',$2,'logical_status','mapped','paca_status_id',$3::text) FROM changes WHERE instance_id=$1 ORDER BY cursor DESC LIMIT 1", instance, revision, input.StatusID); err != nil {
+			fail(out, 503, "resolution sync change failed")
+			return
+		}
 		if _, err = tx.Exec(r.Context(), "INSERT INTO outbox(instance_id,revision,status_id) VALUES($1,$2,$3)", instance, revision, input.StatusID); err != nil {
 			fail(out, 503, "status outbox failed")
 			return

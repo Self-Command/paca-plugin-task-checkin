@@ -57,7 +57,7 @@ png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',1,1,8,2,0,0,0))+ch
 with sync_playwright() as pw:
     browser=pw.chromium.launch()
     context=browser.new_context(viewport={'width':390,'height':844})
-    page=context.new_page();page.goto(end_action['metadata']['action_url'],wait_until='networkidle')
+    page=context.new_page();page.on('pageerror',lambda error:print('browser error:',error));page.goto(end_action['metadata']['action_url'],wait_until='networkidle')
     expect(page.get_by_role('heading',name='独立双卡验收')).to_be_visible()
     assert not page.url.split('#')[-1].startswith('token=')
     page.locator('input[type=file]').last.set_input_files({'name':'check.png','mimeType':'image/png','buffer':png})
@@ -100,11 +100,17 @@ cookies=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cook
 native('POST','/checkin-api/v1/exchange',{'token':token},opener=cookies)
 photo=native('POST','/checkin-api/v1/photos',png,201,opener=cookies,headers={'Content-Type':'image/png'})
 time.sleep(max(0,(datetime.datetime.fromisoformat(close)-datetime.datetime.now(datetime.timezone.utc)).total_seconds())+.1)
-native('POST','/checkin-api/v1/submit',{'media_id':photo['id'],'revision':1,'op_id':'cross-cutoff-test','note':''},410,opener=cookies)
+native('POST','/checkin-api/v1/submit',{'media_id':photo['media_id'],'revision':1,'op_id':'cross-cutoff-test','note':''},410,opener=cookies)
 # Invalid payloads and cross-origin browser writes fail closed.
 native('POST','/checkin-api/v1/exchange',{'token':token},403,headers={'Origin':'https://untrusted.invalid'})
 request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':False})
 native('GET','/healthz',expected=503)
 request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':True})
+worker.terminate();worker.wait(timeout=10)
+worker=subprocess.Popen(['/tmp/checkin-worker'],env=worker_env,stdout=log,stderr=subprocess.STDOUT)
+for _ in range(30):
+    try:native('GET','/healthz');break
+    except Exception:time.sleep(.5)
+assert len(request('GET',path+'/records')['items'])==2,'restart lost or duplicated a card'
 worker.terminate();worker.wait(timeout=10);log.close()
 (ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'real_device':False},indent=2))

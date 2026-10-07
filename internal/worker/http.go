@@ -221,6 +221,15 @@ func (w *Worker) session(ctx context.Context, r *http.Request) (session, error) 
 	}
 	return s, nil
 }
+func prepareStatus(err error)int{
+ if err==nil{return 410}
+ var api apiError
+ if errors.As(err,&api){if api.Code==404{return 410};return 503}
+ text:=err.Error()
+ if strings.Contains(text,"not eligible")||strings.Contains(text,"cancel")||strings.Contains(text,"time frozen"){return 410}
+ if strings.Contains(text,"reconfirm")||strings.Contains(text,"conflict"){return 409}
+ return 503
+}
 func (w *Worker) view(out http.ResponseWriter, r *http.Request) {
 	s, err := w.session(r.Context(), r)
 	if err != nil {
@@ -229,7 +238,7 @@ func (w *Worker) view(out http.ResponseWriter, r *http.Request) {
 	}
 	i, err := w.prepare(r.Context(), s.Instance.Project, s.Instance.Task)
 	if err != nil || i.ID != s.Instance.ID {
-		fail(out, 410, "task cancelled, changed or unavailable")
+		fail(out, prepareStatus(err), "task cancelled, changed or temporarily unavailable")
 		return
 	}
 	var now time.Time

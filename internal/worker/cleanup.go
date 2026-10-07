@@ -9,7 +9,7 @@ func (w *Worker) Cleanup(ctx context.Context) error {
 	if err := w.control(ctx); err != nil {
 		return err
 	}
-	rows, err := w.DB.Query(ctx, "SELECT m.id::text,m.object_key FROM media m JOIN instances i ON i.id=m.instance_id JOIN project_settings p ON p.project_id=i.project_id WHERE (m.state='temporary' AND m.created_at<NOW()-INTERVAL '24 hours') OR (m.state='committed' AND m.created_at<NOW()-((p.config->>'retention_days')::integer*INTERVAL '1 day')) LIMIT 20")
+	rows, err := w.DB.Query(ctx, "SELECT m.id::text,m.object_key FROM media m JOIN instances i ON i.id=m.instance_id JOIN project_settings p ON p.project_id=i.project_id WHERE m.state='expiring' OR (m.state='uploading' AND m.created_at<NOW()-INTERVAL '1 hour') OR (m.state='temporary' AND m.created_at<NOW()-INTERVAL '24 hours') OR (m.state='committed' AND m.created_at<NOW()-((p.config->>'retention_days')::integer*INTERVAL '1 day')) LIMIT 20")
 	if err != nil {
 		return err
 	}
@@ -28,6 +28,8 @@ func (w *Worker) Cleanup(ctx context.Context) error {
 		return rows.Err()
 	}
 	for _, i := range items {
+  // Row state serializes expiry against a final card submission that locks media.
+  if _,err=w.DB.Exec(ctx,"UPDATE media SET state='expiring' WHERE id=$1",i.id);err!=nil{return err}
 		if err = w.Objects.RemoveObject(ctx, w.Bucket, i.key, minio.RemoveObjectOptions{}); err != nil {
 			return err
 		}
