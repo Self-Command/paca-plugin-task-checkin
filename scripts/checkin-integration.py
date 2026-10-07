@@ -96,7 +96,7 @@ with sync_playwright() as pw:
         if current['status_id']==done:break
         time.sleep(1)
     assert current['status_id']==done,'durable outbox did not update Paca'
-    context2=browser.new_context();page2=context2.new_page();page2.goto(start_action['metadata']['action_url'],wait_until='networkidle')
+    page2=context.new_page();page2.goto(start_action['metadata']['action_url'],wait_until='networkidle')
     expect(page2.get_by_role('heading',name='独立双卡验收')).to_be_visible()
     page2.locator('input[type=file]').last.set_input_files({'name':'start.png','mimeType':'image/png','buffer':png})
     page2.get_by_role('button',name='确认打卡',exact=True).click()
@@ -114,7 +114,7 @@ with sync_playwright() as pw:
     assert dup.status==409
     request('POST',task_path+'/cancel',{})
     assert context.request.get('http://127.0.0.1:18082/checkin-api/v1/session',headers=card_headers).status==410
-    context.close();context2.close();browser.close()
+    context.close();browser.close()
 # Independent expired fixture: upload can complete but final submit crosses the deadline.
 late=request('POST',f'/projects/{project["id"]}/tasks',{'title':'截止验收'},201)['data']
 close=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(seconds=8)).isoformat()
@@ -147,7 +147,7 @@ request('DELETE',path+'/pairing/'+pairing['id'])
 native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
 worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
 assert faults=={'fail_status':0,'drop_status':0},'outbox response-loss fixture was not exercised'
-(ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
+(ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'shared_browser_card_isolation':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
 
 # Load the independent extension inside the unchanged official Paca web app.
 (ROOT/'ci.Caddyfile').write_text(':80 {\n handle /api/* {\n reverse_proxy paca-ci-api:8080\n }\n handle_path /plugins/* {\n root * /var/www/plugins\n file_server\n }\n handle {\n reverse_proxy paca-ci-web:3000\n }\n}\n')

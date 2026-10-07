@@ -171,9 +171,9 @@ func (w *Worker) exchange(out http.ResponseWriter, r *http.Request) {
 		fail(out, 401, "invalid link")
 		return
 	}
-	var grant,instance,kind string
+	var grant, instance, kind string
 	var close time.Time
-	err := w.DB.QueryRow(r.Context(), "SELECT g.id::text,g.expires_at,g.instance_id::text,g.kind FROM grants g JOIN instances i ON i.id=g.instance_id JOIN project_settings p ON p.project_id=i.project_id WHERE g.token_hash=$1 AND g.expires_at>clock_timestamp() AND i.state IN('active','frozen') AND p.config->>'enabled'='true'", tokenHash(input.Token)).Scan(&grant, &close,&instance,&kind)
+	err := w.DB.QueryRow(r.Context(), "SELECT g.id::text,g.expires_at,g.instance_id::text,g.kind FROM grants g JOIN instances i ON i.id=g.instance_id JOIN project_settings p ON p.project_id=i.project_id WHERE g.token_hash=$1 AND g.expires_at>clock_timestamp() AND i.state IN('active','frozen') AND p.config->>'enabled'='true'", tokenHash(input.Token)).Scan(&grant, &close, &instance, &kind)
 	if err != nil {
 		fail(out, 410, "link expired, cancelled or replaced")
 		return
@@ -192,16 +192,19 @@ func (w *Worker) exchange(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "session persistence failed")
 		return
 	}
-	http.SetCookie(out, &http.Cookie{Name: "paca_checkin_"+instance+"_"+kind, Value: token, Path: "/checkin-api/v1/", Secure: strings.HasPrefix(w.Public, "https://"), HttpOnly: true, SameSite: http.SameSiteStrictMode, Expires: expires})
+	http.SetCookie(out, &http.Cookie{Name: "paca_checkin_" + instance + "_" + kind, Value: token, Path: "/checkin-api/v1/", Secure: strings.HasPrefix(w.Public, "https://"), HttpOnly: true, SameSite: http.SameSiteStrictMode, Expires: expires})
 	writeJSON(out, 200, map[string]any{"ok": true})
 }
 func (w *Worker) session(ctx context.Context, r *http.Request) (session, error) {
 	if err := w.control(ctx); err != nil {
 		return session{}, err
 	}
-	expectedInstance:=r.Header.Get("X-Checkin-Instance");expectedKind:=r.Header.Get("X-Checkin-Kind")
- if !model.UUID.MatchString(expectedInstance)||(expectedKind!="start"&&expectedKind!="due"){return session{},errors.New("explicit card context required")}
- cookie, err := r.Cookie("paca_checkin_"+expectedInstance+"_"+expectedKind)
+	expectedInstance := r.Header.Get("X-Checkin-Instance")
+	expectedKind := r.Header.Get("X-Checkin-Kind")
+	if !model.UUID.MatchString(expectedInstance) || (expectedKind != "start" && expectedKind != "due") {
+		return session{}, errors.New("explicit card context required")
+	}
+	cookie, err := r.Cookie("paca_checkin_" + expectedInstance + "_" + expectedKind)
 	if err != nil {
 		return session{}, err
 	}
@@ -215,8 +218,10 @@ func (w *Worker) session(ctx context.Context, r *http.Request) (session, error) 
 	if err != nil {
 		return s, err
 	}
-	if s.Instance.ID!=expectedInstance||s.Kind!=expectedKind{return s,errors.New("wrong card context")}
- if s.Instance.State != "active" && s.Instance.State != "frozen" {
+	if s.Instance.ID != expectedInstance || s.Kind != expectedKind {
+		return s, errors.New("wrong card context")
+	}
+	if s.Instance.State != "active" && s.Instance.State != "frozen" {
 		return s, errors.New("instance unavailable")
 	}
 	if _, err = w.config(ctx, s.Instance.Project); err != nil {
@@ -257,13 +262,17 @@ func (w *Worker) view(out http.ResponseWriter, r *http.Request) {
 	}
 	var now time.Time
 	_ = w.DB.QueryRow(r.Context(), "SELECT clock_timestamp()").Scan(&now)
-	cfg,configErr:=w.config(r.Context(),i.Project);if configErr!=nil{fail(out,503,"project settings unavailable");return}
- open, close, _ := i.Window(s.Kind)
+	cfg, configErr := w.config(r.Context(), i.Project)
+	if configErr != nil {
+		fail(out, 503, "project settings unavailable")
+		return
+	}
+	open, close, _ := i.Window(s.Kind)
 	var record json.RawMessage
 	err = w.DB.QueryRow(r.Context(), "SELECT jsonb_build_object('id',id,'media_id',media_id,'note',note,'submitted_at',submitted_at,'status',status) FROM records WHERE instance_id=$1 AND kind=$2", i.ID, s.Kind).Scan(&record)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		fail(out, 503, "record unavailable")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind,"timezone":cfg.Timezone, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
+	writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind, "timezone": cfg.Timezone, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
 }

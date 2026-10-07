@@ -50,15 +50,17 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 	if err = w.call(ctx, "GET", "/projects/"+project+"/task-statuses", nil, &statuses); err != nil {
 		return model.Instance{}, err
 	}
-	valid := map[string]bool{};categories:=map[string]string{}
+	valid := map[string]bool{}
+	categories := map[string]string{}
 	done := false
 	for _, status := range statuses.Items {
-		valid[status.ID] = true;categories[status.ID]=status.Category
+		valid[status.ID] = true
+		categories[status.ID] = status.Category
 		if status.ID == task.Status && status.Category == "done" {
 			done = true
 		}
 	}
-	if !valid[c.ProgressStatus] || !valid[c.DoneStatus] || !valid[c.ArchiveStatus] || categories[c.ProgressStatus]!="inprogress" || categories[c.DoneStatus]!="done" || categories[c.ArchiveStatus]!="done" {
+	if !valid[c.ProgressStatus] || !valid[c.DoneStatus] || !valid[c.ArchiveStatus] || categories[c.ProgressStatus] != "inprogress" || categories[c.DoneStatus] != "done" || categories[c.ArchiveStatus] != "done" {
 		return model.Instance{}, errors.New("configure project in-progress, done and archive states with matching categories")
 	}
 	meta, _ := task.Custom["_integration_state_v1"].(map[string]any)
@@ -325,7 +327,7 @@ func (w *Worker) dispatchStatus(ctx context.Context) error {
 	}
 	fresh.Custom["_checkin_state_v1"] = map[string]any{"v": 1, "instance_id": instance, "status_revision": revision, "end_succeeded": hasEnd, "status_id": status}
 	// Serialize per-instance status operations so a late start cannot overwrite a completed end.
-	if err = w.call(ctx, "PATCH", "/projects/"+project+"/tasks/"+task, map[string]any{"status_id":status,"custom_fields":map[string]any{"_checkin_state_v1":fresh.Custom["_checkin_state_v1"]}}, nil); err != nil {
+	if err = w.call(ctx, "PATCH", "/projects/"+project+"/tasks/"+task, map[string]any{"status_id": status, "custom_fields": map[string]any{"_checkin_state_v1": fresh.Custom["_checkin_state_v1"]}}, nil); err != nil {
 		_, updateErr := tx.Exec(ctx, "UPDATE outbox SET attempts=attempts+1,next_attempt=NOW()+INTERVAL '30 seconds',last_error='task status API unavailable' WHERE id=$1", id)
 		if updateErr != nil {
 			return updateErr
