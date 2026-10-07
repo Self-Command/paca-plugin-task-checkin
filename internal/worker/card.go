@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
+	"strconv"
 	"strings"
- "strconv"
 )
 
 type TaskCard struct {
 	Title    string   `json:"title"`
- Number string `json:"number"`
- Created any `json:"created"`
+	Number   string   `json:"number"`
+	Created  any      `json:"created"`
 	Content  string   `json:"content"`
 	Start    any      `json:"start"`
 	Due      any      `json:"due"`
@@ -52,7 +52,12 @@ func plainBlocks(value any) string {
 	walk(value)
 	return strings.TrimSpace(strings.Join(lines, ""))
 }
-func taskNumber(value int64)string{if value<1{return "未设置"};return "#"+strconv.FormatInt(value,10)}
+func taskNumber(value int64) string {
+	if value < 1 {
+		return "未设置"
+	}
+	return "#" + strconv.FormatInt(value, 10)
+}
 func priorityLabel(value int) string {
 	switch {
 	case value >= 100:
@@ -95,7 +100,7 @@ func (w *Worker) taskCard(ctx context.Context, i model.Instance, cfg model.Confi
 	if err := w.call(ctx, "GET", "/projects/"+i.Project+"/task-statuses", nil, &statuses); err != nil {
 		return TaskCard{}, err
 	}
-	card := TaskCard{Number:taskNumber(task.TaskNumber),Created:task.CreatedAt,Title: task.Title, Content: plainBlocks(task.Description), Start: i.Start, Due: i.Due, Priority: priorityLabel(task.Importance), Status: "未设置", Tags: task.Tags, Source: "任务中心", Timezone: cfg.Timezone}
+	card := TaskCard{Number: taskNumber(task.TaskNumber), Created: task.CreatedAt, Title: task.Title, Content: plainBlocks(task.Description), Start: i.Start, Due: i.Due, Priority: priorityLabel(task.Importance), Status: "未设置", Tags: task.Tags, Source: "任务中心", Timezone: cfg.Timezone}
 	for _, state := range statuses.Items {
 		if state.ID == task.Status {
 			card.Status = statusLabel(state.Name, state.Category)
