@@ -57,7 +57,7 @@ auth={'Authorization':'Bearer '+values['action-secret']}
 now=datetime.datetime.now(datetime.timezone.utc)
 start=(now+datetime.timedelta(minutes=3)).isoformat()
 due=(now+datetime.timedelta(minutes=4)).isoformat()
-task=request('POST',f'/projects/{project["id"]}/tasks',{'title':'独立双卡验收'},201)['data']
+task=request('POST',f'/projects/{project["id"]}/tasks',{'title':'独立双卡验收','importance':75,'tags':['学习','每日记录'],'description':[{'type':'paragraph','content':[{'type':'text','text':'阅读第五章，整理三个要点。'}],'children':[]}]},201)['data']
 task_path=path+f'/tasks/{task["id"]}'
 rule={'enabled':True,'start':start,'due':due}
 request('PUT',task_path+'/checkin',{'config':rule,'revision':0})
@@ -68,6 +68,7 @@ end_action=action('due',due)
 start_action=action('start',start)
 card_headers={'X-Checkin-Instance':end_action['instance_id'],'X-Checkin-Kind':'due'}
 assert end_action['instance_id']==start_action['instance_id']
+card=json.loads(end_action['metadata']['task_card']);assert card['priority']=='高' and card['content']=='阅读第五章，整理三个要点。'
 assert action('due',due)['metadata']==end_action['metadata'],'retry changed authorization snapshot'
 import struct,zlib
 def chunk(kind,data):return struct.pack('!I',len(data))+kind+data+struct.pack('!I',zlib.crc32(kind+data)&0xffffffff)
@@ -79,6 +80,9 @@ with sync_playwright() as pw:
     page=context.new_page();page.on('pageerror',lambda error:print('browser error:',error));page.goto(end_action['metadata']['action_url'],wait_until='networkidle')
     (ROOT/'verification').mkdir(exist_ok=True);page.screenshot(path=str(ROOT/'verification/checkin-initial.png'),full_page=True)
     expect(page.get_by_role('heading',name='独立双卡验收')).to_be_visible()
+    expect(page.get_by_text('任务内容',exact=True)).to_be_visible()
+    expect(page.get_by_text('阅读第五章，整理三个要点。',exact=True)).to_be_visible()
+    assert 'UUID' not in page.locator('main').inner_text()
     assert not page.url.split('#')[-1].startswith('token=')
     page.locator('input[type=file]').last.set_input_files({'name':'check.png','mimeType':'image/png','buffer':png})
     with page.expect_request(lambda r:r.url.endswith('/checkin-api/v1/submit') and r.method=='POST') as submitted_request:

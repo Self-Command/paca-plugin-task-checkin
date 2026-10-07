@@ -58,6 +58,9 @@ type Task struct {
 	StartDate *time.Time     `json:"start_date"`
 	DueDate   *time.Time     `json:"due_date"`
 	Custom    map[string]any `json:"custom_fields"`
+ Importance int `json:"importance"`
+ Tags []string `json:"tags"`
+ Description any `json:"description"`
 }
 type Instance struct {
 	ID             string          `json:"id"`

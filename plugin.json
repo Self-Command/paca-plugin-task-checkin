@@ -217,6 +217,25 @@
             ]
           }
         ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/pairing",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
       }
     ],
     "sensitiveFields": {

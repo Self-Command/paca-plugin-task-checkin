@@ -154,7 +154,9 @@ func (w *Worker) action(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "grant save failed")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"enabled": true, "instance_id": i.ID, "instance_revision": i.Revision, "expires_at": close, "metadata": map[string]string{"action_version": "1", "action_kind": "web", "action_label": "去打卡", "action_url": w.Public + "/checkin/" + i.ID + "/" + input.Kind + "#token=" + token}})
+	card,cardErr:=w.taskCard(r.Context(),i,cfg);if cardErr!=nil{fail(out,503,"task card unavailable");return}
+ cardJSON,_:=json.Marshal(card)
+ writeJSON(out, 200, map[string]any{"enabled": true, "instance_id": i.ID, "instance_revision": i.Revision, "expires_at": close, "metadata": map[string]string{"action_version": "1", "action_kind": "web", "action_label": "去打卡", "action_url": w.Public + "/checkin/" + i.ID + "/" + input.Kind + "#token=" + token,"task_card_version":"1","task_card":string(cardJSON)}})
 }
 func (w *Worker) exchange(out http.ResponseWriter, r *http.Request) {
 	if err := w.control(r.Context()); err != nil {
@@ -274,5 +276,6 @@ func (w *Worker) view(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "record unavailable")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind, "timezone": cfg.Timezone, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
+	card,cardErr:=w.taskCard(r.Context(),i,cfg);if cardErr!=nil{fail(out,503,"task details temporarily unavailable");return}
+ writeJSON(out, 200, map[string]any{"instance_id": i.ID, "revision": i.Revision, "title": i.Title, "kind": s.Kind, "timezone": cfg.Timezone,"task":card, "opens_at": open, "closes_at": close, "server_time": now, "can_submit": i.CanSubmit(s.Kind, now) == nil && len(record) == 0, "record": record})
 }
