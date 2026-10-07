@@ -62,6 +62,8 @@ func (w *Worker) Handler() http.Handler {
 	mux.HandleFunc("POST /checkin-api/v1/photos", w.upload)
 	mux.HandleFunc("POST /checkin-api/v1/submit", w.submit)
 	mux.HandleFunc("GET /checkin-api/v1/photo/{id}", w.photo)
+	mux.HandleFunc("GET /checkin-api/v1/sync/info", w.syncInfo)
+	mux.HandleFunc("GET /checkin-api/v1/sync/sources/{task}", w.syncSource)
 	mux.HandleFunc("GET /checkin-api/v1/sync/changes", w.changes)
 	mux.HandleFunc("GET /checkin-api/v1/sync/media/{id}", w.syncMedia)
 	mux.HandleFunc("POST /checkin-api/v1/sync/receipts", w.prepareReceipt)

@@ -140,14 +140,16 @@ func (w *Worker) control(ctx context.Context) error {
 	}
 	defer response.Body.Close()
 	var c struct {
+		Error string `json:"error"`
 		ID      string `json:"id"`
 		Version string `json:"version"`
 		Source  string `json:"source_sha"`
 		Enabled bool   `json:"enabled"`
 		Schema  int    `json:"schema_version"`
 	}
-	if response.StatusCode != 200 || json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&c) != nil || !c.Enabled || c.ID != PluginID || c.Schema != 1 || c.Version != buildinfo.Version || c.Source != buildinfo.SourceSHA {
-		return fmt.Errorf("host control HTTP %d: enabled=%t id=%s schema=%d version=%s source=%s", response.StatusCode, c.Enabled, c.ID, c.Schema, c.Version, c.Source)
+	decodeErr := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&c)
+	if response.StatusCode != 200 || decodeErr != nil || !c.Enabled || c.ID != PluginID || c.Schema != 1 || c.Version != buildinfo.Version || c.Source != buildinfo.SourceSHA {
+		return fmt.Errorf("host control HTTP %d: enabled=%t id=%s schema=%d version=%s source=%s reason=%.200s", response.StatusCode, c.Enabled, c.ID, c.Schema, c.Version, c.Source, c.Error)
 	}
 	return nil
 }

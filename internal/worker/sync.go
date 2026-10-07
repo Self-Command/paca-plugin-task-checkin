@@ -165,12 +165,13 @@ func (w *Worker) ackReceipt(out http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		Status string `json:"status"`
-		Path   string `json:"path"`
+		Path string `json:"path"`
+		DetailsHash string `json:"details_sha256"`
 	}
 	if !readJSON(out, r, &input) {
 		return
 	}
-	result, err := w.DB.Exec(r.Context(), "UPDATE receipts SET state='confirmed' WHERE id=$1 AND device_id=$2 AND expected->>'tasknotes_status'=$3 AND expected->>'path'=$4 AND state IN('prepared','observed','confirmed')", r.PathValue("id"), d.ID, input.Status, input.Path)
+	result, err := w.DB.Exec(r.Context(), "UPDATE receipts SET state='confirmed' WHERE id=$1 AND device_id=$2 AND expected->>'tasknotes_status'=$3 AND expected->>'path'=$4 AND (expected->>'details_sha256' IS NULL OR expected->>'details_sha256'='' OR expected->>'details_sha256'=$5) AND state IN('prepared','observed','confirmed')", r.PathValue("id"), d.ID, input.Status, input.Path, input.DetailsHash)
 	if err != nil {
 		fail(out, 503, "receipt confirmation failed")
 		return
