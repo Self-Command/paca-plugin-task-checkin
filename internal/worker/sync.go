@@ -164,8 +164,8 @@ func (w *Worker) ackReceipt(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Status string `json:"status"`
-		Path string `json:"path"`
+		Status      string `json:"status"`
+		Path        string `json:"path"`
 		DetailsHash string `json:"details_sha256"`
 	}
 	if !readJSON(out, r, &input) {

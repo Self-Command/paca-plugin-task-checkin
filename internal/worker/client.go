@@ -140,7 +140,7 @@ func (w *Worker) control(ctx context.Context) error {
 	}
 	defer response.Body.Close()
 	var c struct {
-		Error string `json:"error"`
+		Error   string `json:"error"`
 		ID      string `json:"id"`
 		Version string `json:"version"`
 		Source  string `json:"source_sha"`
