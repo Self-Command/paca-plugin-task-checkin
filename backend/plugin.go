@@ -32,7 +32,7 @@ func (p *integrationPlugin) Init(ctx *plugin.Context) error {
 	ctx.Route("POST", "/projects/:projectId/tasks/:taskId/cancel", p.cancel)
 	ctx.Route("GET", "/projects/:projectId/records", p.records)
 	ctx.Route("POST", "/projects/:projectId/pairing", p.pair)
- ctx.Route("GET", "/projects/:projectId/pairing", p.devices)
+	ctx.Route("GET", "/projects/:projectId/pairing", p.devices)
 	ctx.Route("DELETE", "/projects/:projectId/pairing/:id", p.revoke)
 	for _, topic := range []string{"task.created", "task.updated", "task.deleted"} {
 		ctx.On(topic, p.dirty)
@@ -217,7 +217,15 @@ func (p *integrationPlugin) dirty(evt *plugin.Event) {
 	_, _ = p.db.Exec("UPDATE project_settings SET needs_reconcile=TRUE")
 }
 
-func(p *integrationPlugin)devices(req *plugin.Request,res *plugin.Response){
- rows,err:=p.db.Query("SELECT id::text,name,created_at::text FROM devices WHERE project_id=$1 AND enabled ORDER BY created_at DESC",req.PathParam("projectId"));if err!=nil{res.Error(503,"devices unavailable");return}
- items:=[]any{};for _,r:=range rows.Rows{items=append(items,map[string]any{"id":r[0],"name":r[1],"created_at":r[2]})};res.JSON(200,map[string]any{"items":items})
+func (p *integrationPlugin) devices(req *plugin.Request, res *plugin.Response) {
+	rows, err := p.db.Query("SELECT id::text,name,created_at::text FROM devices WHERE project_id=$1 AND enabled ORDER BY created_at DESC", req.PathParam("projectId"))
+	if err != nil {
+		res.Error(503, "devices unavailable")
+		return
+	}
+	items := []any{}
+	for _, r := range rows.Rows {
+		items = append(items, map[string]any{"id": r[0], "name": r[1], "created_at": r[2]})
+	}
+	res.JSON(200, map[string]any{"items": items})
 }
