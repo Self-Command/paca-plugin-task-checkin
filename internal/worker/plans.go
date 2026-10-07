@@ -67,7 +67,7 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 	sm, dm := c.StartMinutes, c.DueMinutes
 	var rawRule []byte
 	var ruleBinding string
- var ruleRevision int
+	var ruleRevision int
 	err = w.DB.QueryRow(ctx, "SELECT config,base_fingerprint,revision FROM task_rules WHERE project_id=$1 AND task_id=$2", project, taskID).Scan(&rawRule, &ruleBinding, &ruleRevision)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return model.Instance{}, err
@@ -118,10 +118,14 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 		return model.Instance{}, err
 	}
 	var latestRule int
- checkErr:=tx.QueryRow(ctx,"SELECT revision FROM task_rules WHERE project_id=$1 AND task_id=$2",project,taskID).Scan(&latestRule)
- if checkErr!=nil&&!errors.Is(checkErr,pgx.ErrNoRows){return model.Instance{},checkErr}
- if latestRule!=ruleRevision{return model.Instance{},errors.New("rule changed while planning; retry")}
- var now time.Time
+	checkErr := tx.QueryRow(ctx, "SELECT revision FROM task_rules WHERE project_id=$1 AND task_id=$2", project, taskID).Scan(&latestRule)
+	if checkErr != nil && !errors.Is(checkErr, pgx.ErrNoRows) {
+		return model.Instance{}, checkErr
+	}
+	if latestRule != ruleRevision {
+		return model.Instance{}, errors.New("rule changed while planning; retry")
+	}
+	var now time.Time
 	if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
 		return model.Instance{}, err
 	}

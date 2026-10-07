@@ -71,7 +71,7 @@ func (p *integrationPlugin) saveSettings(req *plugin.Request, res *plugin.Respon
 		return
 	}
 	raw, _ := json.Marshal(body.Config)
-	changed, err := p.db.Exec("INSERT INTO project_settings(project_id,config) SELECT $1,$2::jsonb WHERE $3=0 OR EXISTS(SELECT 1 FROM project_settings WHERE project_id=$1 AND revision=$3) ON CONFLICT(project_id) DO UPDATE SET config=EXCLUDED.config,revision=project_settings.revision+1,needs_reconcile=TRUE WHERE project_settings.revision=$3",req.PathParam("projectId"),string(raw),body.Revision)
+	changed, err := p.db.Exec("INSERT INTO project_settings(project_id,config) SELECT $1,$2::jsonb WHERE $3=0 OR EXISTS(SELECT 1 FROM project_settings WHERE project_id=$1 AND revision=$3) ON CONFLICT(project_id) DO UPDATE SET config=EXCLUDED.config,revision=project_settings.revision+1,needs_reconcile=TRUE WHERE project_settings.revision=$3", req.PathParam("projectId"), string(raw), body.Revision)
 	if err != nil {
 		res.Error(503, "save failed")
 		return
@@ -135,7 +135,7 @@ func (p *integrationPlugin) saveTask(req *plugin.Request, res *plugin.Response) 
 		return
 	}
 	raw, _ := json.Marshal(body.Config)
-	changed, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text||':'||$2::text,0))), frozen AS MATERIALIZED (SELECT id FROM instances,task_lock WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp() FOR UPDATE OF instances) INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb FROM task_lock WHERE ($4=0 OR EXISTS(SELECT 1 FROM task_rules WHERE project_id=$1 AND task_id=$2 AND revision=$4)) AND NOT EXISTS(SELECT 1 FROM frozen) ON CONFLICT(project_id,task_id) DO UPDATE SET config=EXCLUDED.config,revision=task_rules.revision+1,base_fingerprint='' WHERE task_rules.revision=$4 AND NOT EXISTS(SELECT 1 FROM frozen)",req.PathParam("projectId"),req.PathParam("taskId"),string(raw),body.Revision)
+	changed, err := p.db.Exec("WITH task_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtextextended($1::text||':'||$2::text,0))), frozen AS MATERIALIZED (SELECT id FROM instances,task_lock WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp() FOR UPDATE OF instances) INSERT INTO task_rules(project_id,task_id,config) SELECT $1,$2,$3::jsonb FROM task_lock WHERE ($4=0 OR EXISTS(SELECT 1 FROM task_rules WHERE project_id=$1 AND task_id=$2 AND revision=$4)) AND NOT EXISTS(SELECT 1 FROM frozen) ON CONFLICT(project_id,task_id) DO UPDATE SET config=EXCLUDED.config,revision=task_rules.revision+1,base_fingerprint='' WHERE task_rules.revision=$4 AND NOT EXISTS(SELECT 1 FROM frozen)", req.PathParam("projectId"), req.PathParam("taskId"), string(raw), body.Revision)
 	if err != nil {
 		res.Error(503, "rule save failed")
 		return

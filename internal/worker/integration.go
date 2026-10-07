@@ -8,7 +8,7 @@ import (
 )
 
 func (w *Worker) internalAllowed(r *http.Request) bool {
-	return w.ActionSecret != "" && r.Header.Get("Authorization") == "Bearer "+w.ActionSecret
+	return w.ActionSecret != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+w.ActionSecret)) == 1
 }
 func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 	if !w.internalAllowed(r) {

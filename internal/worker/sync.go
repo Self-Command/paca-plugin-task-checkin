@@ -109,7 +109,7 @@ func (w *Worker) prepareReceipt(out http.ResponseWriter, r *http.Request) {
 		BaseStatus   string `json:"base_status"`
 		Path         string `json:"path"`
 		BaseRevision int    `json:"base_revision"`
- DetailsHash string `json:"details_sha256"`
+		DetailsHash  string `json:"details_sha256"`
 	}
 	if !readJSON(out, r, &input) {
 		return
@@ -132,7 +132,7 @@ func (w *Worker) prepareReceipt(out http.ResponseWriter, r *http.Request) {
 	var payload map[string]any
 	_ = json.Unmarshal(raw, &payload)
 	source, _ := payload["source"].(map[string]any)
-	expected := map[string]any{"source_ref": source["source_ref"], "tasknotes_status": input.Status, "base_status": input.BaseStatus, "path": input.Path, "revision": current, "instance_id": payload["instance_id"],"details_sha256":input.DetailsHash}
+	expected := map[string]any{"source_ref": source["source_ref"], "tasknotes_status": input.Status, "base_status": input.BaseStatus, "path": input.Path, "revision": current, "instance_id": payload["instance_id"], "details_sha256": input.DetailsHash}
 	body, _ := json.Marshal(expected)
 	id, err := randomID()
 	if err != nil {
