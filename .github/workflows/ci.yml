@@ -105,6 +105,8 @@ jobs:
           go build -trimpath -o /tmp/checkin-worker ./cmd/worker
           go mod tidy
           python3 scripts/host-smoke.py
+      - name: Upload compression in production browser
+        run: python3 scripts/photo-compression.py
       - name: Collect worker evidence
         if: always()
         run: |
