@@ -16,8 +16,10 @@ func (w *Worker) device(ctx context.Context, r *http.Request) (device, error) {
 	if err := w.control(ctx); err != nil {
 		return device{}, err
 	}
-	if delegated,ok:=r.Context().Value(delegatedDeviceKey{}).(device);ok{return delegated,nil}
- header := r.Header.Get("Authorization")
+	if delegated, ok := r.Context().Value(delegatedDeviceKey{}).(device); ok {
+		return delegated, nil
+	}
+	header := r.Header.Get("Authorization")
 	if !strings.HasPrefix(header, "Bearer ") || len(strings.TrimPrefix(header, "Bearer ")) != 64 {
 		return device{}, errors.New("paired integration token required")
 	}
