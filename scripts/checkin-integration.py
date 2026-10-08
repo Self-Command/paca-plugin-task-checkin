@@ -20,7 +20,7 @@ class FaultProxy(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def forward(self):
         body=self.rfile.read(int(self.headers.get('Content-Length','0'))) or None
-        status_patch=self.command=='PATCH' and '/tasks/' in self.path
+        status_patch=self.command=='PATCH' and '/tasks/' in self.path and 'status_id' in json.loads(body or b'{}')
         if status_patch and faults['fail_status']:
             faults['fail_status']-=1;self.send_response(503);self.end_headers();self.wfile.write(b'{"error":"injected CI status outage"}');return
         req=urllib.request.Request('http://localhost:18080'+self.path,data=body,method=self.command,headers={k:v for k,v in self.headers.items() if k.lower() not in ('host','content-length','connection')})

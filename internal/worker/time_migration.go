@@ -57,8 +57,10 @@ func (w *Worker) migrateRuleTimes(ctx context.Context, project string, task mode
 	if err = w.call(ctx, "PATCH", "/projects/"+project+"/tasks/"+task.ID, patch, &fresh); err != nil {
 		return task, err
 	}
-	encoded,_:=json.Marshal(patch);var expected model.Task;_=json.Unmarshal(encoded,&expected)
- var verified model.Task
+	encoded, _ := json.Marshal(patch)
+	var expected model.Task
+	_ = json.Unmarshal(encoded, &expected)
+	var verified model.Task
 	if err = w.call(ctx, "GET", "/projects/"+project+"/tasks/"+task.ID, nil, &verified); err != nil {
 		return task, err
 	}
