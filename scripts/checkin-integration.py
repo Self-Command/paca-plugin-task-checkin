@@ -145,10 +145,18 @@ assert len(request('GET',path+'/records')['items'])==2,'restart lost or duplicat
 # Pairing is restricted to its declared source connection; unrelated media is denied.
 pairing=request('POST',path+'/pairing',{'name':'scoped device','connection_id':'11111111-1111-4111-8111-111111111111'},201)
 paired={'Authorization':'Bearer '+pairing['token']}
+scope=native('POST','/internal/v1/pairing-info',{'token':pairing['token']},headers=auth)
+assert scope=={'project_id':project['id'],'connection_id':'11111111-1111-4111-8111-111111111111'}
+native('POST','/internal/v1/pairing-info',{'token':pairing['token']},expected=401,headers=paired)
+delegated={**auth,'X-Sync-Project':project['id'],'X-Sync-Connection':scope['connection_id'],'X-Sync-Device':'22222222-2222-4222-8222-222222222222'}
+assert native('GET','/internal/v1/sync/changes?after=0',headers=delegated)['items']==[]
+native('GET','/internal/v1/sync/media/'+record['media_id'],expected=404,headers=delegated)
+native('GET','/internal/v1/sync/info',expected=401,headers=paired)
 assert native('GET','/checkin-api/v1/sync/changes?after=0',headers=paired)['items']==[]
 native('GET','/checkin-api/v1/sync/media/'+record['media_id'],expected=404,headers=paired)
 request('DELETE',path+'/pairing/'+pairing['id'])
 native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
+native('POST','/internal/v1/pairing-info',{'token':pairing['token']},expected=401,headers=auth)
 worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
 assert faults=={'fail_status':0,'drop_status':0},'outbox response-loss fixture was not exercised'
 (ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'shared_browser_card_isolation':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
