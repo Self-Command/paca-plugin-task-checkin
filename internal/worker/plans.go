@@ -130,17 +130,9 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 			return model.Instance{}, err
 		}
 	}
-	if meta["source"] != "tasknotes" && meta["source"] != "task-sync" {
-		linked, lookupErr := w.source(ctx, project, taskID)
-		if lookupErr == nil {
-			source = linked
-		} else {
-			var api apiError
-			if !errors.As(lookupErr, &api) || api.Code != 404 && api.Code != 403 {
-				return model.Instance{}, lookupErr
-			}
-		}
-	}
+ if meta["source"]!="tasknotes"&&meta["source"]!="task-sync" {
+ if linked,lookupErr:=w.source(ctx,project,taskID);lookupErr==nil {source=linked}
+ }
 	tx, err := w.DB.Begin(ctx)
 	if err != nil {
 		return model.Instance{}, err
@@ -163,6 +155,7 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 	}
 	current, err := scanInstance(tx.QueryRow(ctx, "SELECT "+instanceColumns+" FROM instances WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') FOR UPDATE", project, taskID))
 	hasCurrent := err == nil
+ if hasCurrent&&string(source)=="{}"&&len(current.Source)>2{source=current.Source}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return current, err
 	}
