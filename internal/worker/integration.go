@@ -2,10 +2,13 @@ package worker
 
 import (
 	"crypto/subtle"
+	"errors"
+	"github.com/jackc/pgx/v5"
 	"encoding/json"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
 	"net/http"
 	"strings"
+	"time"
 )
 
 func (w *Worker) internalAllowed(r *http.Request) bool {
@@ -31,6 +34,11 @@ func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, err.Error())
 		return
 	}
+	if _, err := w.config(r.Context(), input.Project); err != nil {
+		if !errors.Is(err,pgx.ErrNoRows) && err.Error()!="check-in is disabled or needs configuration" { fail(out,503,"configuration unavailable");return }
+		writeJSON(out,200,map[string]any{"enabled":false})
+		return
+	}
 	i, err := w.prepare(r.Context(), input.Project, input.Task)
 	if err != nil {
 		if err.Error() == "task is not eligible for check-in" {
@@ -45,7 +53,7 @@ func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "record unavailable")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"enabled": true, "instance_id": i.ID, "revision": i.Revision, "start": i.Start, "due": i.Due, "start_minutes": i.StartMinutes, "due_minutes": i.DueMinutes, "end_succeeded": ended, "state": i.State})
+	writeJSON(out, 200, map[string]any{"enabled": true, "instance_id": i.ID, "revision": i.Revision, "start": i.Start, "due": i.Due, "start_minutes": i.StartMinutes, "due_minutes": i.DueMinutes, "end_succeeded": ended, "state": i.State, "frozen": !time.Now().Before(i.Freeze)})
 }
 
 // A passes a candidate echo with changed fields. Only a previously registered, scoped
