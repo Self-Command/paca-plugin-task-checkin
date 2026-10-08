@@ -111,20 +111,46 @@ func (w *Worker) matchWriteback(out http.ResponseWriter, r *http.Request) {
 	writeJSON(out, 200, map[string]any{"matched": true, "receipt_id": id, "status": strings.TrimSpace(input.Status)})
 }
 
-func (w *Worker) timeFreeze(out http.ResponseWriter,r *http.Request){
- if !w.internalAllowed(r){fail(out,401,"internal authorization required");return}
- var input struct{Project string `json:"project_id"`;Task string `json:"task_id"`}
- if !readJSON(out,r,&input){return}
- if !model.UUID.MatchString(input.Project)||!model.UUID.MatchString(input.Task){fail(out,400,"invalid identity");return}
- if err:=w.control(r.Context());err!=nil{fail(out,503,"打卡安排暂时无法读取。");return}
- if _,err:=w.config(r.Context(),input.Project);err!=nil {
- if errors.Is(err,pgx.ErrNoRows)||err.Error()=="check-in is disabled or needs configuration"{writeJSON(out,200,map[string]any{"enabled":false,"frozen":false});return}
- fail(out,503,"打卡配置暂时无法读取。");return
- }
- var frozen bool
- if err:=w.DB.QueryRow(r.Context(),"SELECT EXISTS(SELECT 1 FROM instances WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp())",input.Project,input.Task).Scan(&frozen);err!=nil{fail(out,503,"打卡窗口暂时无法读取。");return}
- var raw []byte;var rule model.Rule
- err:=w.DB.QueryRow(r.Context(),"SELECT config FROM task_rules WHERE project_id=$1 AND task_id=$2",input.Project,input.Task).Scan(&raw)
- if err!=nil&&!errors.Is(err,pgx.ErrNoRows){fail(out,503,"打卡时间暂时无法读取。");return};_=json.Unmarshal(raw,&rule)
- writeJSON(out,200,map[string]any{"enabled":true,"frozen":frozen,"legacy_start":rule.Start,"legacy_due":rule.Due})
+func (w *Worker) timeFreeze(out http.ResponseWriter, r *http.Request) {
+	if !w.internalAllowed(r) {
+		fail(out, 401, "internal authorization required")
+		return
+	}
+	var input struct {
+		Project string `json:"project_id"`
+		Task    string `json:"task_id"`
+	}
+	if !readJSON(out, r, &input) {
+		return
+	}
+	if !model.UUID.MatchString(input.Project) || !model.UUID.MatchString(input.Task) {
+		fail(out, 400, "invalid identity")
+		return
+	}
+	if err := w.control(r.Context()); err != nil {
+		fail(out, 503, "打卡安排暂时无法读取。")
+		return
+	}
+	if _, err := w.config(r.Context(), input.Project); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || err.Error() == "check-in is disabled or needs configuration" {
+			writeJSON(out, 200, map[string]any{"enabled": false, "frozen": false})
+			return
+		}
+		fail(out, 503, "打卡配置暂时无法读取。")
+		return
+	}
+	var frozen bool
+	if err := w.DB.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM instances WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict') AND freeze_at<=clock_timestamp())", input.Project, input.Task).Scan(&frozen); err != nil {
+		fail(out, 503, "打卡窗口暂时无法读取。")
+		return
+	}
+	var raw []byte
+	var rule model.Rule
+	err := w.DB.QueryRow(r.Context(), "SELECT config FROM task_rules WHERE project_id=$1 AND task_id=$2", input.Project, input.Task).Scan(&raw)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		fail(out, 503, "打卡时间暂时无法读取。")
+		return
+	}
+	_ = json.Unmarshal(raw, &rule)
+	writeJSON(out, 200, map[string]any{"enabled": true, "frozen": frozen, "legacy_start": rule.Start, "legacy_due": rule.Due})
 }

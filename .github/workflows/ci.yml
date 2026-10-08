@@ -78,7 +78,7 @@ jobs:
         run: git diff --exit-code -- backend cmd internal go.mod go.sum
   compatibility:
     needs: build
-    if: always() && needs.build.result != 'cancelled'
+    if: needs.build.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
