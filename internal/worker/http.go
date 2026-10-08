@@ -65,6 +65,7 @@ func (w *Worker) Handler() http.Handler {
 	mux.HandleFunc("POST /internal/v1/sync/conflicts/{id}/resolve", w.delegated(w.resolveConflict))
 	mux.HandleFunc("POST /internal/v1/action", w.action)
 	mux.HandleFunc("POST /internal/v1/task", w.taskPlan)
+ mux.HandleFunc("POST /internal/v1/times/freeze", w.timeFreeze)
 	mux.HandleFunc("POST /internal/v1/writeback-match", w.matchWriteback)
 	mux.HandleFunc("POST /checkin-api/v1/exchange", w.exchange)
 	mux.HandleFunc("GET /checkin-api/v1/session", w.view)

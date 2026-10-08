@@ -67,6 +67,8 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 	blocked := task.Status == c.ArchiveStatus || meta["archived"] == true || meta["recurring"] == true
 	start, due := model.Precise(task, "start"), model.Precise(task, "due")
 	sm, dm := c.StartMinutes, c.DueMinutes
+ if v,ok:=meta["reminder_start_minutes"].(float64);ok{sm=int(v)}
+ if v,ok:=meta["reminder_due_minutes"].(float64);ok{dm=int(v)}
 	var rawRule []byte
 	var ruleBinding string
 	var ruleRevision int
@@ -75,12 +77,14 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 		return model.Instance{}, err
 	}
 	if len(rawRule) > 0 {
-		fingerprint := model.TaskFingerprint(task)
+		var savedRule model.Rule;_=json.Unmarshal(rawRule,&savedRule)
+        legacy:=savedRule.Start!=nil||savedRule.Due!=nil||savedRule.StartMinutes!=nil||savedRule.DueMinutes!=nil
+        fingerprint := model.TaskFingerprint(task)
 		if ruleBinding == "" {
 			if _, err = w.DB.Exec(ctx, "UPDATE task_rules SET base_fingerprint=$3 WHERE project_id=$1 AND task_id=$2 AND base_fingerprint=''", project, taskID, fingerprint); err != nil {
 				return model.Instance{}, err
 			}
-		} else if ruleBinding != fingerprint {
+		} else if ruleBinding != fingerprint && legacy {
 			_, _ = w.DB.Exec(ctx, "UPDATE instances SET state=CASE WHEN freeze_at<=clock_timestamp() THEN 'conflict' ELSE 'cancelled' END,last_error='source time changed; reconfirm exact time' WHERE project_id=$1 AND task_id=$2 AND state IN('active','frozen','conflict')", project, taskID)
 			return model.Instance{}, errors.New("source time changed; reconfirm exact time")
 		}
@@ -91,12 +95,13 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 		if !rule.Enabled {
 			blocked = true
 		}
-		if rule.Start != nil {
-			start = rule.Start
-		}
-		if rule.Due != nil {
-			due = rule.Due
-		}
+        if rule.Start!=nil||rule.Due!=nil||rule.StartMinutes!=nil||rule.DueMinutes!=nil {
+ task,err=w.migrateRuleTimes(ctx,project,task,rule,ruleRevision);if err!=nil{return model.Instance{},err}
+ start,due=model.Precise(task,"start"),model.Precise(task,"due")
+ meta,_=task.Custom["_integration_state_v1"].(map[string]any)
+ if v,ok:=meta["reminder_start_minutes"].(float64);ok{sm=int(v)};if v,ok:=meta["reminder_due_minutes"].(float64);ok{dm=int(v)}
+ rule.StartMinutes=nil;rule.DueMinutes=nil
+ }
 		if rule.StartMinutes != nil {
 			sm = *rule.StartMinutes
 		}
@@ -111,6 +116,10 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 			return model.Instance{}, err
 		}
 	}
+ if meta["source"]!="tasknotes"&&meta["source"]!="task-sync" {
+ linked,lookupErr:=w.source(ctx,project,taskID)
+ if lookupErr==nil{source=linked}else{var api apiError;if !errors.As(lookupErr,&api)||api.Code!=404&&api.Code!=403{return model.Instance{},lookupErr}}
+ }
 	tx, err := w.DB.Begin(ctx)
 	if err != nil {
 		return model.Instance{}, err

@@ -137,7 +137,8 @@
             "name": "requirePermissions",
             "scope": "project",
             "permissions": [
-              "task_checkin.manage"
+              "task_checkin.manage",
+              "tasks.write"
             ]
           }
         ]
