@@ -2,10 +2,10 @@ package worker
 
 import (
 	"crypto/subtle"
-	"errors"
-	"github.com/jackc/pgx/v5"
 	"encoding/json"
+	"errors"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
+	"github.com/jackc/pgx/v5"
 	"net/http"
 	"strings"
 	"time"
@@ -35,8 +35,11 @@ func (w *Worker) taskPlan(out http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := w.config(r.Context(), input.Project); err != nil {
-		if !errors.Is(err,pgx.ErrNoRows) && err.Error()!="check-in is disabled or needs configuration" { fail(out,503,"configuration unavailable");return }
-		writeJSON(out,200,map[string]any{"enabled":false})
+		if !errors.Is(err, pgx.ErrNoRows) && err.Error() != "check-in is disabled or needs configuration" {
+			fail(out, 503, "configuration unavailable")
+			return
+		}
+		writeJSON(out, 200, map[string]any{"enabled": false})
 		return
 	}
 	i, err := w.prepare(r.Context(), input.Project, input.Task)

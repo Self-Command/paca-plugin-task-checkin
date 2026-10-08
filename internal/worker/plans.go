@@ -105,7 +105,7 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 		}
 	}
 	source := json.RawMessage(`{}`)
-	if meta["source"] == "tasknotes" {
+	if meta["source"] == "tasknotes" || meta["source"] == "task-sync" {
 		source, err = w.source(ctx, project, taskID)
 		if err != nil {
 			return model.Instance{}, err
