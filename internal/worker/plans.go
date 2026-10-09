@@ -124,7 +124,9 @@ func (w *Worker) prepare(ctx context.Context, project, taskID string) (model.Ins
 		}
 	}
 	if !blocked {
-		if err = model.ValidateWindowMinutes(start, due, sm, dm); err != nil { return model.Instance{}, err }
+		if err = model.ValidateWindowMinutes(start, due, sm, dm); err != nil {
+			return model.Instance{}, err
+		}
 	}
 	source := json.RawMessage(`{}`)
 	if meta["source"] == "tasknotes" || meta["source"] == "task-sync" {

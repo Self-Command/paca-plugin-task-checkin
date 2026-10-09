@@ -153,8 +153,8 @@ func TaskFingerprint(t Task) string {
 }
 
 func ValidateWindowMinutes(start, due *time.Time, startMinutes, dueMinutes int) error {
- if (start != nil && (startMinutes < 1 || startMinutes > 1440)) || (due != nil && (dueMinutes < 1 || dueMinutes > 1440)) {
-  return errors.New("拍照打卡必须提前1至1440分钟提醒，请在任务时间与提醒中重新设置。")
- }
- return nil
+	if (start != nil && (startMinutes < 1 || startMinutes > 1440)) || (due != nil && (dueMinutes < 1 || dueMinutes > 1440)) {
+		return errors.New("拍照打卡必须提前1至1440分钟提醒，请在任务时间与提醒中重新设置。")
+	}
+	return nil
 }
