@@ -151,3 +151,10 @@ func TaskFingerprint(t Task) string {
 	m, _ := t.Custom["_integration_state_v1"].(map[string]any)
 	return Hash(map[string]any{"start_date": t.StartDate, "due_date": t.DueDate, "start_instant": m["start_instant"], "due_instant": m["due_instant"], "start_precision": m["start_precision"], "due_precision": m["due_precision"], "timezone": m["timezone"]})
 }
+
+func ValidateWindowMinutes(start, due *time.Time, startMinutes, dueMinutes int) error {
+ if (start != nil && (startMinutes < 1 || startMinutes > 1440)) || (due != nil && (dueMinutes < 1 || dueMinutes > 1440)) {
+  return errors.New("拍照打卡必须提前1至1440分钟提醒，请在任务时间与提醒中重新设置。")
+ }
+ return nil
+}

@@ -40,3 +40,11 @@ func TestDateOnlyIsNeverMidnightReminder(t *testing.T) {
 		t.Fatal("enabled without project states")
 	}
 }
+
+func TestEmptyCheckinWindowRejected(t *testing.T) {
+ at:=time.Now()
+ if ValidateWindowMinutes(&at,&at,0,10)==nil { t.Fatal("zero start lead accepted") }
+ if ValidateWindowMinutes(&at,&at,10,0)==nil { t.Fatal("zero due lead accepted") }
+ if ValidateWindowMinutes(&at,nil,1,0)!=nil { t.Fatal("independent valid start rejected") }
+ if ValidateWindowMinutes(nil,&at,0,10)!=nil { t.Fatal("independent valid due rejected") }
+}

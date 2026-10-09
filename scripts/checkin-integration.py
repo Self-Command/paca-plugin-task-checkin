@@ -64,6 +64,12 @@ request('PUT',task_path+'/checkin',{'config':rule,'revision':0})
 request('PUT',task_path+'/checkin',{'config':rule,'revision':1})
 request('PUT',task_path+'/checkin',{'config':rule,'revision':1},409)
 def action(kind,target):return native('POST','/internal/v1/action',{'project_id':project['id'],'task_id':task['id'],'kind':kind,'target':target},headers=auth)
+# Reproduce AI zero-minute metadata bypass: reject before any instance/grant exists.
+zero=request('POST',f'/projects/{project["id"]}/tasks',{'title':'零分钟打卡拒绝','start_date':start,'custom_fields':{'_integration_state_v1':{'version':2,'source':'paca','timezone':'Asia/Shanghai','start_precision':'instant','start_instant':start,'start_core_date':start[:10],'reminder_start_minutes':0}}},201)['data']
+native('POST','/internal/v1/action',{'project_id':project['id'],'task_id':zero['id'],'kind':'start','target':start},expected=409,headers=auth)
+rows=subprocess.check_output(['docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-Atc',"SELECT count(*) FROM plugin_data_com_selfcommand_task_checkin.instances WHERE task_id='"+zero['id']+"'"],text=True).strip()
+assert rows=='0','invalid zero lead created a check-in instance'
+request('DELETE',f'/projects/{project["id"]}/tasks/{zero["id"]}')
 end_action=action('due',due)
 start_action=action('start',start)
 card_headers={'X-Checkin-Instance':end_action['instance_id'],'X-Checkin-Kind':'due'}
@@ -159,7 +165,7 @@ native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
 native('POST','/internal/v1/pairing-info',{'token':pairing['token']},expected=401,headers=auth)
 worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
 assert faults=={'fail_status':0,'drop_status':0},'outbox response-loss fixture was not exercised'
-(ROOT/'verification/checkin-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'shared_browser_card_isolation':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
+(ROOT/'verification/checkin-report.json').write_text(json.dumps({'zero_lead_metadata_rejected_before_instance':True,'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'shared_browser_card_isolation':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
 
 # Load the independent extension inside the unchanged official Paca web app.
 (ROOT/'ci.Caddyfile').write_text(':80 {\n handle /api/* {\n reverse_proxy paca-ci-api:8080\n }\n handle_path /plugins/* {\n root * /var/www/plugins\n file_server\n }\n handle {\n reverse_proxy paca-ci-web:3000\n }\n}\n')
