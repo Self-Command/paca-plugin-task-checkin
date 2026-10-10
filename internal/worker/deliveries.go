@@ -152,10 +152,11 @@ func (w *Worker) reportDelivery(out http.ResponseWriter, r *http.Request) {
 		writeJSON(out, 200, prior)
 		return
 	}
-	var policy, sha, mediaState string
+	var policy, sha, mediaState, priorState, priorCode string
+	var priorNext time.Time
 	var revision int64
 	var attempts int
-	err = tx.QueryRow(r.Context(), "SELECT p.state,p.revision,s.attempts,m.sha256,m.state FROM sync_policies p JOIN sync_deliveries s ON s.record_id=p.record_id AND s.device_id=$1 JOIN records r ON r.id=p.record_id JOIN media m ON m.id=r.media_id WHERE p.project_id=$2 AND p.connection_id=$3 AND p.record_id=$4 FOR UPDATE OF p,s", d.ID, d.Project, d.Connection, in.Record).Scan(&policy, &revision, &attempts, &sha, &mediaState)
+	err = tx.QueryRow(r.Context(), "SELECT p.state,p.revision,s.attempts,m.sha256,m.state,s.state,s.error_code,s.next_attempt FROM sync_policies p JOIN sync_deliveries s ON s.record_id=p.record_id AND s.device_id=$1 JOIN records r ON r.id=p.record_id JOIN media m ON m.id=r.media_id WHERE p.project_id=$2 AND p.connection_id=$3 AND p.record_id=$4 FOR UPDATE OF p,s", d.ID, d.Project, d.Connection, in.Record).Scan(&policy, &revision, &attempts, &sha, &mediaState, &priorState, &priorCode, &priorNext)
 	if err != nil || revision != in.Revision || policy != "active" {
 		fail(out, 409, "同步项已处理，请刷新。")
 		return
@@ -164,7 +165,10 @@ func (w *Worker) reportDelivery(out http.ResponseWriter, r *http.Request) {
 		fail(out, 409, "照片校验尚未完成。")
 		return
 	}
-	state, next := "pending", time.Now()
+	state, next := priorState, priorNext
+	if in.Stage == "progress" {
+		in.Code = priorCode
+	}
 	if in.Stage == "failed" {
 		attempts++
 		state, next = model.DeliveryRetry(attempts, in.Code, next)
@@ -175,6 +179,7 @@ func (w *Worker) reportDelivery(out http.ResponseWriter, r *http.Request) {
 			return
 		}
 		state = "confirmed"
+		in.Code = ""
 	}
 	_, err = tx.Exec(r.Context(), "UPDATE sync_deliveries SET state=$3,attempts=$4,next_attempt=$5,error_code=$6,media_verified=media_verified OR $7,record_written=record_written OR $8,status_verified=status_verified OR $9,updated_at=NOW() WHERE device_id=$1 AND record_id=$2", d.ID, in.Record, state, attempts, next, in.Code, in.MediaVerified, in.RecordWritten, in.StatusVerified)
 	if err == nil {

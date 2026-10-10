@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 )
 
 type sourceStatus struct {
@@ -13,6 +14,8 @@ type sourceStatus struct {
 }
 
 func (w *Worker) sourceStatus(ctx context.Context, project, task string) (sourceStatus, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	var status sourceStatus
 	err := w.call(ctx, "GET", "/plugins/com.selfcommand.tasknotes-webhook/projects/"+project+"/tasks/"+task+"/source-status", nil, &status)
 	return status, err
