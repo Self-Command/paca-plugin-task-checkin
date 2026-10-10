@@ -171,7 +171,7 @@ func (w *Worker) reportDelivery(out http.ResponseWriter, r *http.Request) {
 	}
 	if in.Stage == "failed" {
 		attempts++
-		state, next = model.DeliveryRetry(attempts, in.Code, next)
+		state, next = model.DeliveryRetry(attempts, in.Code, time.Now())
 	}
 	if in.Stage == "confirmed" {
 		if !in.MediaVerified || !in.RecordWritten {

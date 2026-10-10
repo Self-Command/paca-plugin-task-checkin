@@ -28,6 +28,9 @@ for attempt in range(10):
     report = {'record_id':row['record_id'],'op_id':str(uuid.uuid4()),'base_revision':3,'stage':'failed','error_code':'transfer_unavailable','media_sha256':'','media_verified':False,'record_written':False,'status_verified':False}
     response = native('POST','/checkin-api/v1/sync/deliveries/report',report,headers=device_one)
     assert response['attempts']==attempt+1
+    if attempt==0:
+        delay=(datetime.datetime.fromisoformat(response['next_attempt'].replace('Z','+00:00'))-datetime.datetime.now(datetime.timezone.utc)).total_seconds()
+        assert 25<delay<=30, 'retry delay must start at the current failure'
     assert native('POST','/checkin-api/v1/sync/deliveries/report',report,headers=device_one)==response
 assert response['state']=='needs_action'
 assert all(r['state']=='pending' for r in deliveries(device_two)['items'])
@@ -80,4 +83,4 @@ peer_history=next(r for r in deliveries(device_two)['items'] if r['record_id']==
 assert peer_history['historical_path']==historical['path'] and peer_history['policy']=='active'
 source_fault.clear()
 native('GET','/checkin-api/v1/sync/deliveries?after=0',expected=401)
-(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True},indent=2))
+(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'retry_wait_starts_at_failure':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True},indent=2))
