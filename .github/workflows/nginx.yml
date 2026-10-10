@@ -3,11 +3,15 @@ on:
   push:
     paths:
       - deploy/nginx-checkin.conf
+      - deploy/nginx-task-sync.conf
+      - deploy/nginx-sync-log.conf
       - scripts/nginx-smoke.py
       - .github/workflows/nginx.yml
   pull_request:
     paths:
       - deploy/nginx-checkin.conf
+      - deploy/nginx-task-sync.conf
+      - deploy/nginx-sync-log.conf
       - scripts/nginx-smoke.py
       - .github/workflows/nginx.yml
   workflow_dispatch:

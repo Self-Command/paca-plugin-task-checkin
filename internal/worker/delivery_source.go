@@ -72,6 +72,27 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 			}
 			continue
 		}
+		if status.State == "unlinked" || status.Connection != item.Connection || status.Ref != ref {
+			tx, beginErr := w.DB.Begin(ctx)
+			if beginErr != nil {
+				return beginErr
+			}
+			_, updateErr := tx.Exec(ctx, "UPDATE sync_policies SET reason='source_missing',checked_at=NOW(),updated_at=NOW() WHERE connection_id=$1 AND record_id=$2 AND state='active' AND reason<>'user_recovery'", item.Connection, item.Record)
+			if updateErr == nil {
+				_, updateErr = tx.Exec(ctx, "UPDATE sync_deliveries SET state='needs_action',error_code='source_missing',updated_at=NOW() WHERE record_id=$1 AND state IN('pending','retry_wait')", item.Record)
+			}
+			if updateErr == nil {
+				updateErr = deliveryEvent(ctx, tx, device{Project: item.Project, Connection: item.Connection}, item.Record, true)
+			}
+			if updateErr != nil {
+				_ = tx.Rollback(ctx)
+				return updateErr
+			}
+			if updateErr = tx.Commit(ctx); updateErr != nil {
+				return updateErr
+			}
+			continue
+		}
 		_, err = w.DB.Exec(ctx, "UPDATE sync_policies SET checked_at=NOW() WHERE connection_id=$1 AND record_id=$2", item.Connection, item.Record)
 		if err != nil {
 			return err

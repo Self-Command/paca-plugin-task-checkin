@@ -31,7 +31,7 @@ func (w *Worker) ensureDeliveries(ctx context.Context, d device) error {
 	if err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, "INSERT INTO sync_deliveries(device_id,record_id) SELECT $1,record_id FROM sync_policies WHERE project_id=$2 AND connection_id=$3 ON CONFLICT DO NOTHING RETURNING record_id::text", d.ID, d.Project, d.Connection)
+	rows, err := tx.Query(ctx, "INSERT INTO sync_deliveries(device_id,record_id,state,error_code) SELECT $1,record_id,CASE WHEN reason='source_missing' THEN 'needs_action' ELSE 'pending' END,CASE WHEN reason='source_missing' THEN 'source_missing' ELSE '' END FROM sync_policies WHERE project_id=$2 AND connection_id=$3 ON CONFLICT DO NOTHING RETURNING record_id::text", d.ID, d.Project, d.Connection)
 	if err != nil {
 		return err
 	}
