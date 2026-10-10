@@ -17,10 +17,13 @@ for name,value in values.items():
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 faults={'fail_status':1,'drop_status':1}
 source_fault={}
+source_link_fault={}
 class FaultProxy(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def forward(self):
         body=self.rfile.read(int(self.headers.get('Content-Length','0'))) or None
+        if self.path.endswith('/source-link') and source_link_fault:
+            payload=json.dumps(source_link_fault).encode();self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
         if self.path.endswith('/source-status') and source_fault:
             status=source_fault.get('http',200);payload=json.dumps({k:v for k,v in source_fault.items() if k not in ('http','core_http')}).encode()
             self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return

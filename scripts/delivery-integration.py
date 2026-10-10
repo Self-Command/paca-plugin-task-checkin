@@ -88,6 +88,11 @@ for _ in range(60):
     if archived['policy']=='archived_deleted':break
     time.sleep(.5)
 else:raise AssertionError('matching deletion tombstone did not archive record')
+source_link_fault.update(json.loads(source_json))
+record_task=subprocess.check_output(['docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-Atc',f"SELECT i.task_id::text FROM {schema}instances i JOIN {schema}records r ON r.instance_id=i.id WHERE r.id='{record_two['record_id']}'"],text=True).strip()
+fresh_source=native('GET','/checkin-api/v1/sync/sources/'+record_task,headers={**device_one,'X-Sync-Version':'2'})
+assert fresh_source['source_state']=='deleted', 'a stale active legacy link masked the authoritative tombstone'
+source_link_fault.clear()
 assert len(request('GET',path+'/records')['items'])==2
 historical={**restore,'record_id':record_two['record_id'],'op_id':str(uuid.uuid4()),'action':'associate','base_revision':archived['revision'],'path':'Tasks/保留历史.md','note_created':'2026-10-10T00:00:00Z'}
 associated=native('POST','/checkin-api/v1/sync/deliveries/actions',historical,headers=device_one)
@@ -96,4 +101,4 @@ peer_history=next(r for r in deliveries(device_two)['items'] if r['record_id']==
 assert peer_history['historical_path']==historical['path'] and peer_history['policy']=='active'
 source_fault.clear()
 native('GET','/checkin-api/v1/sync/deliveries?after=0',expected=401)
-(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'retry_wait_starts_at_failure':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True,'stale_link_core_404_requires_action':True,'core_outage_not_deletion':True},indent=2))
+(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'retry_wait_starts_at_failure':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True,'stale_link_core_404_requires_action':True,'core_outage_not_deletion':True,'stale_link_does_not_mask_tombstone':True},indent=2))
