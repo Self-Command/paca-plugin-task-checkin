@@ -13,6 +13,8 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
+	"strconv"
 	"net/http"
 	"time"
 )
@@ -257,12 +259,20 @@ func (w *Worker) streamPhoto(out http.ResponseWriter, r *http.Request, object st
 		return
 	}
 	defer photo.Close()
-	if _, err = photo.Stat(); err != nil {
+	info, err := photo.Stat()
+	if err != nil {
 		fail(out, 404, "photo expired or unavailable")
 		return
 	}
 	out.Header().Set("Content-Type", "image/jpeg")
 	out.Header().Set("Cache-Control", "private, no-store")
 	out.Header().Set("Content-Disposition", "inline; filename=checkin.jpg")
-	_, _ = io.Copy(out, photo)
+	out.Header().Set("Content-Length", strconv.FormatInt(info.Size, 10))
+	out.Header().Set("X-Accel-Buffering", "no")
+	_ = http.NewResponseController(out).SetWriteDeadline(time.Now().Add(300 * time.Second))
+	n, copyErr := io.Copy(out, photo)
+	if copyErr != nil || n != info.Size {
+		log.Printf("photo_transfer incomplete bytes=%d expected=%d", n, info.Size)
+		panic(http.ErrAbortHandler)
+	}
 }

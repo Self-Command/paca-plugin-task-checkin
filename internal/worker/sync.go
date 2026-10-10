@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"encoding/json"
 	"errors"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
@@ -25,6 +27,14 @@ func (w *Worker) device(ctx context.Context, r *http.Request) (device, error) {
 	}
 	var d device
 	err := w.DB.QueryRow(ctx, "SELECT id::text,project_id::text,connection_id FROM devices WHERE token_hash=$1 AND enabled", tokenHash(strings.TrimPrefix(header, "Bearer "))).Scan(&d.ID, &d.Project, &d.Connection)
+	if err == nil && model.UUID.MatchString(r.Header.Get("X-Sync-Device")) {
+		client := r.Header.Get("X-Sync-Device")
+		sum := sha256.Sum256([]byte(d.Connection + "\n" + client))
+		sum[6] = (sum[6] & 15) | 80
+		sum[8] = (sum[8] & 63) | 128
+		d.ID = fmt.Sprintf("%x-%x-%x-%x-%x", sum[:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
+		_, err = w.DB.Exec(ctx, "INSERT INTO devices(id,project_id,connection_id,name,token_hash) VALUES($1,$2,$3,'同步设备',$4) ON CONFLICT(id) DO NOTHING", d.ID, d.Project, d.Connection, "service:"+fmt.Sprintf("%x", sum[:]))
+	}
 	return d, err
 }
 func (w *Worker) changes(out http.ResponseWriter, r *http.Request) {

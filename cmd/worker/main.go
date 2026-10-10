@@ -52,6 +52,9 @@ func main() {
 			if err = w.Tick(tick); err != nil {
 				log.Print("check-in worker paused; review host control and settings")
 			}
+			if err = w.DeliveryTick(tick); err != nil {
+				log.Print("Obsidian delivery processing pending")
+			}
 			cancel()
 		case <-cleanup.C:
 			clean, cancel := context.WithTimeout(ctx, 45*time.Second)

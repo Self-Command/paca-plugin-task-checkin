@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
 	"net/http"
 )
@@ -22,7 +23,7 @@ func (w *Worker) syncInfo(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "project states unavailable")
 		return
 	}
-	writeJSON(out, 200, map[string]any{"connection_id": d.Connection, "statuses": states.Items})
+	writeJSON(out, 200, map[string]any{"connection_id": d.Connection, "statuses": states.Items, "project_id": d.Project, "capabilities": []string{"checkin"}})
 }
 func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 	d, err := w.device(r.Context(), r)
@@ -37,7 +38,17 @@ func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 	}
 	raw, err := w.source(r.Context(), d.Project, task)
 	if err != nil {
-		fail(out, 404, "source unavailable")
+		var api apiError
+		if !errors.As(err, &api) || api.Code != 404 {
+			writeJSON(out, 503, map[string]any{"code": "unavailable", "error": "来源暂时无法读取，请稍后重试。", "retryable": true})
+			return
+		}
+		history, historyErr := w.historicSource(r.Context(), d, task)
+		if historyErr != nil {
+			writeJSON(out, 404, map[string]any{"code": "source_missing", "error": "来源需要重新关联。", "retryable": false})
+			return
+		}
+		writeJSON(out, 200, history)
 		return
 	}
 	var source map[string]any
@@ -45,5 +56,6 @@ func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 		fail(out, 404, "source not associated with device")
 		return
 	}
+	source["source_state"] = "active"
 	writeJSON(out, 200, source)
 }

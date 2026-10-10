@@ -237,6 +237,44 @@
             ]
           }
         ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/sync-deliveries",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.read"
+            ]
+          }
+        ]
+      },
+      {
+        "method": "POST",
+        "path": "/projects/:projectId/sync-delivery-actions",
+        "middlewares": [
+          {
+            "name": "optionalAuthn"
+          },
+          {
+            "name": "requireFreshPassword"
+          },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": [
+              "task_checkin.manage"
+            ]
+          }
+        ]
       }
     ],
     "sensitiveFields": {

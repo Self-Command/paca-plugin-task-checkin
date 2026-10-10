@@ -160,6 +160,7 @@ native('GET','/internal/v1/sync/media/'+record['media_id'],expected=404,headers=
 native('GET','/internal/v1/sync/info',expected=401,headers=paired)
 assert native('GET','/checkin-api/v1/sync/changes?after=0',headers=paired)['items']==[]
 native('GET','/checkin-api/v1/sync/media/'+record['media_id'],expected=404,headers=paired)
+exec((ROOT/'scripts/delivery-integration.py').read_text(),globals())
 request('DELETE',path+'/pairing/'+pairing['id'])
 native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
 native('POST','/internal/v1/pairing-info',{'token':pairing['token']},expected=401,headers=auth)

@@ -32,6 +32,8 @@ func (p *integrationPlugin) Init(ctx *plugin.Context) error {
 	ctx.Route("PUT", "/projects/:projectId/tasks/:taskId/checkin", p.saveTask)
 	ctx.Route("POST", "/projects/:projectId/tasks/:taskId/cancel", p.cancel)
 	ctx.Route("GET", "/projects/:projectId/records", p.records)
+	ctx.Route("GET", "/projects/:projectId/sync-deliveries", p.syncDeliveries)
+	ctx.Route("POST", "/projects/:projectId/sync-delivery-actions", p.deliveryAction)
 	ctx.Route("POST", "/projects/:projectId/pairing", p.pair)
 	ctx.Route("GET", "/projects/:projectId/pairing", p.devices)
 	ctx.Route("DELETE", "/projects/:projectId/pairing/:id", p.revoke)
