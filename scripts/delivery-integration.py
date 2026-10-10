@@ -38,5 +38,39 @@ for _ in range(30):
     if any(r['record_id']==row['record_id'] and r['revision']==4 and r['attempts']==0 for r in rows):break
     time.sleep(.5)
 else:raise AssertionError('manager action did not persist or execute')
+# A transient source outage cannot archive a task. Only a matching tombstone can.
+record_two=next(r for r in deliveries(device_one)['items'] if r['record_id']!=row['record_id'])
+ref='tasknotes:source-classification-fixture'
+source_json=json.dumps({'connection_id':conn,'source_ref':ref,'path':'Tasks/旧任务.md','snapshot':{'dateCreated':'2026-10-07T00:00:00Z','status':'open','title':'旧任务'}},ensure_ascii=False)
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-v','ON_ERROR_STOP=1','-c',f"UPDATE {schema}instances SET source='{source_json}'::jsonb WHERE id IN(SELECT instance_id FROM {schema}records WHERE id='{record_two['record_id']}'); UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+source_fault.update({'http':503,'state':'deleted','connection_id':conn,'source_ref':ref})
+time.sleep(6)
+assert all(r['policy']=='active' for r in deliveries(device_one)['items']), 'outage was interpreted as deletion'
+source_fault['http']=200;source_fault['state']='unlinked'
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+for _ in range(60):
+    unknown=next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])
+    if unknown['state']=='needs_action' and unknown['error_code']=='source_missing':break
+    time.sleep(.5)
+else:raise AssertionError('unlinked record was not made actionable')
+assert unknown['policy']=='active'
+source_fault['state']='deleted';source_fault['source_ref']='different-generation'
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+time.sleep(6)
+assert next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])['policy']=='active'
+source_fault['source_ref']=ref
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+for _ in range(60):
+    archived=next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])
+    if archived['policy']=='archived_deleted':break
+    time.sleep(.5)
+else:raise AssertionError('matching deletion tombstone did not archive record')
+assert len(request('GET',path+'/records')['items'])==2
+historical={**restore,'record_id':record_two['record_id'],'op_id':str(uuid.uuid4()),'action':'associate','base_revision':archived['revision'],'path':'Tasks/保留历史.md','note_created':'2026-10-10T00:00:00Z'}
+associated=native('POST','/checkin-api/v1/sync/deliveries/actions',historical,headers=device_one)
+assert associated['state']=='applied'
+peer_history=next(r for r in deliveries(device_two)['items'] if r['record_id']==record_two['record_id'])
+assert peer_history['historical_path']==historical['path'] and peer_history['policy']=='active'
+source_fault.clear()
 native('GET','/checkin-api/v1/sync/deliveries?after=0',expected=401)
-(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True},indent=2))
+(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True},indent=2))
