@@ -49,7 +49,7 @@ func (w *Worker) purgeArchivedRecords(ctx context.Context) error {
 	}
 	type item struct {
 		connection, record, object string
-		attempts int
+		attempts                   int
 	}
 	items := []item{}
 	for rows.Next() {
@@ -109,7 +109,7 @@ func (w *Worker) finishArchivePurge(ctx context.Context, connection, record stri
 		return nil
 	}
 	queries := []struct {
-		sql string
+		sql  string
 		args []any
 	}{
 		{"DELETE FROM receipts WHERE change_cursor IN(SELECT cursor FROM changes WHERE record_id=$1)", []any{record}},
