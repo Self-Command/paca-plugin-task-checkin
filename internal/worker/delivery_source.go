@@ -26,18 +26,18 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	rows, err := w.DB.Query(ctx, "SELECT p.project_id::text,p.connection_id,p.record_id::text,i.task_id::text,i.source FROM sync_policies p JOIN records r ON r.id=p.record_id JOIN instances i ON i.id=r.instance_id WHERE p.state='active' AND p.reason<>'user_recovery' AND (p.checked_at IS NULL OR p.checked_at<NOW()-INTERVAL '60 seconds') ORDER BY p.checked_at NULLS FIRST LIMIT 10")
+	rows, err := w.DB.Query(ctx, "SELECT p.project_id::text,p.connection_id,p.record_id::text,i.task_id::text,i.source,p.reason FROM sync_policies p JOIN records r ON r.id=p.record_id JOIN instances i ON i.id=r.instance_id WHERE p.state='active' AND p.reason<>'user_recovery' AND (p.checked_at IS NULL OR p.checked_at<NOW()-INTERVAL '60 seconds') ORDER BY p.checked_at NULLS FIRST LIMIT 10")
 	if err != nil {
 		return err
 	}
 	type candidate struct {
-		Project, Connection, Record, Task string
+		Project, Connection, Record, Task, Reason string
 		Raw                               []byte
 	}
 	items := []candidate{}
 	for rows.Next() {
 		var item candidate
-		if err = rows.Scan(&item.Project, &item.Connection, &item.Record, &item.Task, &item.Raw); err != nil {
+		if err = rows.Scan(&item.Project, &item.Connection, &item.Record, &item.Task, &item.Raw, &item.Reason); err != nil {
 			rows.Close()
 			return err
 		}
@@ -83,6 +83,27 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 			_, updateErr := tx.Exec(ctx, "UPDATE sync_policies SET reason='source_missing',checked_at=NOW(),updated_at=NOW() WHERE connection_id=$1 AND record_id=$2 AND state='active' AND reason<>'user_recovery'", item.Connection, item.Record)
 			if updateErr == nil {
 				_, updateErr = tx.Exec(ctx, "UPDATE sync_deliveries SET state='needs_action',error_code='source_missing',updated_at=NOW() WHERE record_id=$1 AND state IN('pending','retry_wait') AND device_id IN(SELECT id FROM devices WHERE connection_id=$2 AND project_id=$3)", item.Record, item.Connection, item.Project)
+			}
+			if updateErr == nil && item.Reason != "source_missing" {
+				updateErr = deliveryEvent(ctx, tx, device{Project: item.Project, Connection: item.Connection}, item.Record, true)
+			}
+			if updateErr != nil {
+				_ = tx.Rollback(ctx)
+				return updateErr
+			}
+			if updateErr = tx.Commit(ctx); updateErr != nil {
+				return updateErr
+			}
+			continue
+		}
+		if item.Reason == "source_missing" && status.State == "active" {
+			tx, beginErr := w.DB.Begin(ctx)
+			if beginErr != nil {
+				return beginErr
+			}
+			_, updateErr := tx.Exec(ctx, "UPDATE sync_policies SET reason='',revision=revision+1,checked_at=NOW(),updated_at=NOW() WHERE connection_id=$1 AND record_id=$2 AND state='active' AND reason='source_missing'", item.Connection, item.Record)
+			if updateErr == nil {
+				_, updateErr = tx.Exec(ctx, "UPDATE sync_deliveries SET state='pending',attempts=0,error_code='',next_attempt=NOW(),updated_at=NOW() WHERE record_id=$1 AND error_code='source_missing' AND device_id IN(SELECT id FROM devices WHERE connection_id=$2 AND project_id=$3)", item.Record, item.Connection, item.Project)
 			}
 			if updateErr == nil {
 				updateErr = deliveryEvent(ctx, tx, device{Project: item.Project, Connection: item.Connection}, item.Record, true)

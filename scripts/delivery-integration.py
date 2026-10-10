@@ -54,6 +54,13 @@ for _ in range(60):
     time.sleep(.5)
 else:raise AssertionError('unlinked record was not made actionable')
 assert unknown['policy']=='active'
+source_fault['state']='active'
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+for _ in range(60):
+    recovered=next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])
+    if recovered['state']=='pending' and recovered['reason']=='':break
+    time.sleep(.5)
+else:raise AssertionError('a verified restored association was not requeued')
 source_fault['state']='deleted';source_fault['source_ref']='different-generation'
 cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
 time.sleep(6)
@@ -73,4 +80,4 @@ peer_history=next(r for r in deliveries(device_two)['items'] if r['record_id']==
 assert peer_history['historical_path']==historical['path'] and peer_history['policy']=='active'
 source_fault.clear()
 native('GET','/checkin-api/v1/sync/deliveries?after=0',expected=401)
-(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True},indent=2))
+(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True},indent=2))
