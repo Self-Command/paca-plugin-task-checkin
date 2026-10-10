@@ -14,6 +14,7 @@ import urllib.request
 root = pathlib.Path(__file__).resolve().parent.parent
 script = (b"/* self-hosted check-in application */\n" + b"var checkin=true;\n" * 65536)
 stylesheet = b"body { color: #171717; background: #fff; }\n" * 8192
+photo = bytes(range(256)) * 40960
 
 
 class Upstream(http.server.BaseHTTPRequestHandler):
@@ -23,6 +24,10 @@ class Upstream(http.server.BaseHTTPRequestHandler):
             content, kind = stylesheet, "text/css; charset=utf-8"
         elif self.path.startswith("/checkin-api/"):
             content, kind = b'{"ok":true}', "application/json"
+        elif self.path.startswith("/task-sync/v1/checkin/media/"):
+            content, kind = photo, "image/jpeg"
+        elif self.path.startswith("/task-sync/"):
+            content, kind = b'{"items":[' + b'"task",' * 32768 + b'"end"]}', "application/json"
         self.send_response(200)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(content)))
@@ -36,6 +41,8 @@ class Upstream(http.server.BaseHTTPRequestHandler):
 
 upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 18789), Upstream)
 threading.Thread(target=upstream.serve_forever, daemon=True).start()
+sync_upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 18790), Upstream)
+threading.Thread(target=sync_upstream.serve_forever, daemon=True).start()
 report = {"source_sha": os.environ.get("GITHUB_SHA"), "checks": []}
 with tempfile.TemporaryDirectory(prefix="checkin-nginx-") as temporary:
     prefix = pathlib.Path(temporary)
@@ -44,11 +51,13 @@ with tempfile.TemporaryDirectory(prefix="checkin-nginx-") as temporary:
     blocked.mkdir(mode=0o700)
     subprocess.run(["sudo", "chown", "root:root", str(blocked)], check=True)
     config = prefix / "nginx.conf"
+    sync_config = (root / "deploy/nginx-task-sync.conf").read_text().replace("/var/log/nginx/paca-sync.access.log", str(prefix / "sync-access.log")).replace("/var/log/nginx/paca-sync.error.log", str(prefix / "sync-error.log"))
+    (prefix / "sync.conf").write_text(sync_config)
     config.write_text(
         f"user www-data;\nworker_processes 1;\npid {prefix}/nginx.pid;\n"
         f"error_log {prefix}/error.log info;\nevents {{ worker_connections 128; }}\n"
-        f"http {{ access_log off; proxy_temp_path {blocked}; "
-        f"server {{ listen 127.0.0.1:18089; include {root}/deploy/nginx-checkin.conf; }} }}\n"
+        f"http {{ access_log off; proxy_temp_path {blocked}; include {root}/deploy/nginx-sync-log.conf; "
+        f"server {{ listen 127.0.0.1:18089; include {root}/deploy/nginx-checkin.conf; include {prefix}/sync.conf; }} }}\n"
     )
     subprocess.run(["sudo", "nginx", "-t", "-c", str(config)], check=True)
     subprocess.run(["sudo", "nginx", "-c", str(config)], check=True)
@@ -58,17 +67,19 @@ with tempfile.TemporaryDirectory(prefix="checkin-nginx-") as temporary:
             ("/checkin/assets/checkin-example.js", script),
             ("/checkin/assets/checkin-example.css", stylesheet),
             ("/checkin-api/v1/session", b'{"ok":true}'),
+            ("/task-sync/v1/checkin/media/00000000-0000-4000-8000-000000000001", photo),
+            ("/task-sync/v1/changes", b'{"items":[' + b'"task",' * 32768 + b'"end"]}'),
         ]:
             for encoding in ("identity", "gzip"):
                 req = urllib.request.Request(
                     "http://127.0.0.1:18089" + path,
                     headers={"Accept-Encoding": encoding},
                 )
-                with urllib.request.urlopen(req, timeout=15) as response:
+                with urllib.request.urlopen(req, timeout=60) as response:
                     received = bytearray()
                     while chunk := response.read(8192):
                         received.extend(chunk)
-                        time.sleep(0.004)
+                        time.sleep(0.004 if len(expected) < 2000000 else 0.001)
                     compressed = response.headers.get("Content-Encoding") == "gzip"
                     decoded = gzip.decompress(received) if compressed else received
                     assert decoded == expected, f"truncated response: {path}"
@@ -85,10 +96,17 @@ with tempfile.TemporaryDirectory(prefix="checkin-nginx-") as temporary:
         errors = (prefix / "error.log").read_text()
         assert "Permission denied" not in errors and "[crit]" not in errors
         assert not subprocess.check_output(["sudo", "find", str(blocked), "-mindepth", "1", "-print"])
+        sync_lines = (prefix / "sync-access.log").read_text().splitlines()
+        assert len(sync_lines) == 4
+        for line in sync_lines:
+            entry = json.loads(line)
+            assert entry["status"] == 200 and int(entry["upstream_bytes"]) == entry["bytes"]
+            assert "Authorization" not in line and "?" not in entry["uri"]
         report["unwritable_temp_without_disk_writes"] = True
     finally:
         subprocess.run(["sudo", "nginx", "-s", "quit", "-c", str(config)], check=True)
         upstream.shutdown()
+        sync_upstream.shutdown()
         subprocess.run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(prefix)], check=True)
 verification = root / "verification"
 verification.mkdir(exist_ok=True)
