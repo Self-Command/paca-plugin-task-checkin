@@ -44,6 +44,10 @@ func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 			writeJSON(out, 503, map[string]any{"code": "unavailable", "error": "来源暂时无法读取，请稍后重试。", "retryable": true})
 			return
 		}
+		if r.Header.Get("X-Sync-Version") != "2" {
+			writeJSON(out, 404, map[string]any{"code": "source_missing", "error": "来源需要重新关联。", "retryable": false})
+			return
+		}
 		history, historyErr := w.historicSource(r.Context(), d, task)
 		if historyErr != nil {
 			if !errors.Is(historyErr, pgx.ErrNoRows) {

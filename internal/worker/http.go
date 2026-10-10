@@ -114,6 +114,12 @@ func (w *Worker) Handler() http.Handler {
 				return
 			}
 		}
+		if strings.Contains(r.URL.Path, "/sync/") {
+			if err := w.control(r.Context()); err != nil {
+				fail(out, 503, "同步服务暂不可用，请稍后重试。")
+				return
+			}
+		}
 		mux.ServeHTTP(out, r)
 	})
 }
