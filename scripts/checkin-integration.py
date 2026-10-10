@@ -22,8 +22,10 @@ class FaultProxy(BaseHTTPRequestHandler):
     def forward(self):
         body=self.rfile.read(int(self.headers.get('Content-Length','0'))) or None
         if self.path.endswith('/source-status') and source_fault:
-            status=source_fault.get('http',200);payload=json.dumps({k:v for k,v in source_fault.items() if k!='http'}).encode()
+            status=source_fault.get('http',200);payload=json.dumps({k:v for k,v in source_fault.items() if k not in ('http','core_http')}).encode()
             self.send_response(status);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
+        if self.command=='GET' and '/tasks/' in self.path and not '/plugins/' in self.path and source_fault.get('core_http'):
+            payload=b'{"error":"isolated core lookup fixture"}';self.send_response(source_fault['core_http']);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(payload)));self.end_headers();self.wfile.write(payload);return
         status_patch=self.command=='PATCH'  and '/tasks/' in self.path and 'status_id' in json.loads(body or b'{}')
         if status_patch and faults['fail_status']:
             faults['fail_status']-=1;self.send_response(503);self.end_headers();self.wfile.write(b'{"error":"injected CI status outage"}');return

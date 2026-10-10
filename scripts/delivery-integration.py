@@ -64,6 +64,19 @@ for _ in range(60):
     if recovered['state']=='pending' and recovered['reason']=='':break
     time.sleep(.5)
 else:raise AssertionError('a verified restored association was not requeued')
+source_fault['core_http']=404
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+for _ in range(60):
+    missing=next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])
+    if missing['state']=='needs_action' and missing['error_code']=='source_missing':break
+    time.sleep(.5)
+else:raise AssertionError('a stale link with a missing core task was not actionable')
+assert missing['policy']=='active', 'plain core 404 must never archive a record'
+source_fault['core_http']=503
+cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
+time.sleep(6)
+assert next(r for r in deliveries(device_one)['items'] if r['record_id']==record_two['record_id'])['policy']=='active'
+source_fault.pop('core_http')
 source_fault['state']='deleted';source_fault['source_ref']='different-generation'
 cmd('docker','exec','paca-ci-db','psql','-U','postgres','-d','paca','-c',f"UPDATE {schema}sync_policies SET checked_at=NULL WHERE record_id='{record_two['record_id']}';")
 time.sleep(6)
@@ -83,4 +96,4 @@ peer_history=next(r for r in deliveries(device_two)['items'] if r['record_id']==
 assert peer_history['historical_path']==historical['path'] and peer_history['policy']=='active'
 source_fault.clear()
 native('GET','/checkin-api/v1/sync/deliveries?after=0',expected=401)
-(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'retry_wait_starts_at_failure':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True},indent=2))
+(ROOT/'verification/delivery-report.json').write_text(json.dumps({'shared_policy_across_devices':True,'independent_device_progress':True,'action_idempotency':True,'stale_revision_rejected':True,'bounded_retry':True,'retry_wait_starts_at_failure':True,'failed_report_idempotency':True,'history_preserved':True,'manager_actions_durable':True,'source_outage_not_deletion':True,'unlinked_requires_action':True,'generation_mismatch_not_deletion':True,'tombstone_auto_archives':True,'historical_association_shared':True,'verified_association_requeues':True,'stale_link_core_404_requires_action':True,'core_outage_not_deletion':True},indent=2))

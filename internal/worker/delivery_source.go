@@ -42,6 +42,19 @@ func (w *Worker) sourceStatus(ctx context.Context, project, task string) (source
 	if status.State != "active" && status.State != "unlinked" && status.State != "deleted" {
 		return status, errors.New("invalid source status")
 	}
+	if status.State == "active" {
+		// A legacy link can outlive its core task. A bare 404 is actionable,
+		// while only the identity-specific tombstone above proves deletion.
+		var taskBody map[string]any
+		if err = w.call(ctx, "GET", "/projects/"+project+"/tasks/"+task, nil, &taskBody); err != nil {
+			var api apiError
+			if errors.As(err, &api) && api.Code == http.StatusNotFound {
+				status.State = "unlinked"
+			} else {
+				return status, err
+			}
+		}
+	}
 	return status, nil
 }
 

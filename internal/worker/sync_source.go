@@ -65,6 +65,23 @@ func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 		fail(out, 404, "source not associated with device")
 		return
 	}
+	status, statusErr := w.sourceStatus(r.Context(), d.Project, task)
+	if statusErr != nil {
+		writeJSON(out, 503, map[string]any{"code": "unavailable", "error": "来源暂时无法读取，请稍后重试。", "retryable": true})
+		return
+	}
+	if status.State != "active" || status.Connection != d.Connection || status.Ref != source["source_ref"] {
+		if r.Header.Get("X-Sync-Version") != "2" {
+			writeJSON(out, 404, map[string]any{"code": "source_missing", "error": "来源需要重新关联。", "retryable": false})
+			return
+		}
+		source["source_state"] = "unlinked"
+		if status.State == "deleted" && status.Connection == d.Connection && status.Ref == source["source_ref"] {
+			source["source_state"] = "deleted"
+		}
+		writeJSON(out, 200, source)
+		return
+	}
 	source["source_state"] = "active"
 	writeJSON(out, 200, source)
 }
