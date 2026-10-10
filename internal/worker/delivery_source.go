@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 )
 
 type sourceStatus struct {
@@ -30,7 +29,7 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 	}
 	type candidate struct {
 		Project, Connection, Record, Task string
-		Raw                              []byte
+		Raw                               []byte
 	}
 	items := []candidate{}
 	for rows.Next() {
@@ -98,4 +97,3 @@ func (w *Worker) historicSource(ctx context.Context, d device, task string) (map
 	}
 	return source, nil
 }
-

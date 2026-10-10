@@ -3,9 +3,9 @@ package worker
 import (
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
 	"net/http"
 	"strconv"

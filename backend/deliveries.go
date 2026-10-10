@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
 	plugin "github.com/Paca-AI/plugin-sdk-go"
+	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
 )
 
 func (p *integrationPlugin) syncDeliveries(req *plugin.Request, res *plugin.Response) {
