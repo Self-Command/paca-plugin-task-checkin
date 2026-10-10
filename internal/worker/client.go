@@ -148,7 +148,7 @@ func (w *Worker) control(ctx context.Context) error {
 		Schema  int    `json:"schema_version"`
 	}
 	decodeErr := json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&c)
-	if response.StatusCode != 200 || decodeErr != nil || !c.Enabled || c.ID != PluginID || c.Schema != 2 || c.Version != buildinfo.Version || c.Source != buildinfo.SourceSHA {
+	if response.StatusCode != 200 || decodeErr != nil || !c.Enabled || c.ID != PluginID || c.Schema != buildinfo.SchemaVersion || c.Version != buildinfo.Version || c.Source != buildinfo.SourceSHA {
 		return fmt.Errorf("host control HTTP %d: enabled=%t id=%s schema=%d version=%s source=%s reason=%.200s", response.StatusCode, c.Enabled, c.ID, c.Schema, c.Version, c.Source, c.Error)
 	}
 	return nil

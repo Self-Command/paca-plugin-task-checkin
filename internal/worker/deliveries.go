@@ -72,7 +72,7 @@ func (w *Worker) deliveries(out http.ResponseWriter, r *http.Request) {
 		fail(out, 503, "同步处理状态暂不可用。")
 		return
 	}
-	rows, err := w.DB.Query(r.Context(), "SELECT e.cursor,jsonb_build_object('record_id',p.record_id,'policy',p.state,'revision',p.revision,'reason',p.reason,'historical_path',p.historical_path,'historical_created',p.historical_created,'state',COALESCE(s.state,'pending'),'attempts',COALESCE(s.attempts,0),'next_attempt',s.next_attempt,'error_code',COALESCE(s.error_code,''),'media_verified',COALESCE(s.media_verified,false),'record_written',COALESCE(s.record_written,false),'status_verified',COALESCE(s.status_verified,false)) FROM sync_delivery_events e JOIN sync_policies p ON p.record_id=e.record_id AND p.connection_id=e.connection_id LEFT JOIN sync_deliveries s ON s.record_id=p.record_id AND s.device_id=$1 WHERE e.project_id=$2 AND e.connection_id=$3 AND e.cursor>$4 AND (e.device_id IS NULL OR e.device_id=$1) ORDER BY e.cursor LIMIT 100", d.ID, d.Project, d.Connection, after)
+	rows, err := w.DB.Query(r.Context(), "SELECT e.cursor,jsonb_build_object('record_id',e.record_id,'policy',CASE WHEN q.state='complete' THEN 'purged' WHEN q.record_id IS NOT NULL THEN 'purging' ELSE p.state END,'revision',COALESCE(p.revision,q.revision),'reason',COALESCE(p.reason,'user_purge'),'historical_path',COALESCE(p.historical_path,''),'historical_created',COALESCE(p.historical_created,''),'state',COALESCE(s.state,'pending'),'attempts',COALESCE(s.attempts,0),'next_attempt',s.next_attempt,'error_code',COALESCE(s.error_code,''),'media_verified',COALESCE(s.media_verified,false),'record_written',COALESCE(s.record_written,false),'status_verified',COALESCE(s.status_verified,false)) FROM sync_delivery_events e LEFT JOIN sync_policies p ON p.record_id=e.record_id AND p.connection_id=e.connection_id LEFT JOIN sync_purges q ON q.record_id=e.record_id AND q.connection_id=e.connection_id LEFT JOIN sync_deliveries s ON s.record_id=e.record_id AND s.device_id=$1 WHERE e.project_id=$2 AND e.connection_id=$3 AND e.cursor>$4 AND (p.record_id IS NOT NULL OR q.record_id IS NOT NULL) AND (e.device_id IS NULL OR e.device_id=$1) ORDER BY e.cursor LIMIT 100", d.ID, d.Project, d.Connection, after)
 	if err != nil {
 		fail(out, 503, "同步处理状态暂不可用。")
 		return
@@ -208,6 +208,10 @@ func (w *Worker) deliveryAction(out http.ResponseWriter, r *http.Request) {
 		fail(out, 400, "处理操作无效。")
 		return
 	}
+	if in.Action == "purge" {
+		fail(out, 403, "请在 Paca 项目设置中确认清理归档记录。")
+		return
+	}
 	raw, _ := json.Marshal(in)
 	hash := model.Hash(in)
 	var stored string
@@ -245,6 +249,9 @@ func (w *Worker) processDeliveryAction(ctx context.Context, connection, op strin
 	var raw []byte
 	var state, actor string
 	err = tx.QueryRow(ctx, "SELECT request,state,actor FROM sync_delivery_ops WHERE connection_id=$1 AND op_id=$2 FOR UPDATE", connection, op).Scan(&raw, &state, &actor)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil || state != "queued" {
 		return err
 	}
@@ -255,16 +262,45 @@ func (w *Worker) processDeliveryAction(ctx context.Context, connection, op strin
 	var d device
 	d.Connection = connection
 	var revision int64
-	err = tx.QueryRow(ctx, "SELECT project_id::text,revision FROM sync_policies WHERE connection_id=$1 AND record_id=$2 FOR UPDATE", connection, in.Record).Scan(&d.Project, &revision)
-	if err != nil {
+	var policy string
+	err = tx.QueryRow(ctx, "SELECT project_id::text,revision,state FROM sync_policies WHERE connection_id=$1 AND record_id=$2 FOR UPDATE", connection, in.Record).Scan(&d.Project, &revision, &policy)
+	missing := errors.Is(err, pgx.ErrNoRows)
+	if err != nil && !missing {
 		return err
 	}
+	err = nil
 	result := map[string]any{"state": "applied", "revision": revision + 1}
 	state = "applied"
-	if in.Revision != revision {
+	if missing {
+		state = "conflict"
+		result = map[string]any{"code": "purged", "error": "同步记录已清理。"}
+	} else if in.Revision != revision {
 		state = "conflict"
 		result = map[string]any{"code": "revision", "error": "同步项已变化，请刷新后处理。"}
+	} else if in.Action == "purge" {
+		if actor != "project_manager" || policy != "archived_deleted" {
+			state = "conflict"
+			result = map[string]any{"code": "not_archived", "error": "只能清理已归档记录。"}
+		} else {
+			var allowed bool
+			err = tx.QueryRow(ctx, "SELECT NOT EXISTS(SELECT 1 FROM changes WHERE record_id=$1 AND (project_id<>$2 OR connection_id<>$3)) AND NOT EXISTS(SELECT 1 FROM sync_policies WHERE record_id=$1 AND connection_id<>$3)", in.Record, d.Project, connection).Scan(&allowed)
+			if err == nil && !allowed {
+				state = "conflict"
+				result = map[string]any{"code": "shared_record", "error": "记录仍被其他来源使用，不能清理。"}
+			} else if err == nil {
+				result, err = w.queueArchivePurge(ctx, tx, d, in)
+			}
+		}
 	} else {
+		var purging bool
+		err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM sync_purges WHERE connection_id=$1 AND record_id=$2)", connection, in.Record).Scan(&purging)
+		if err != nil {
+			return err
+		}
+		if purging {
+			state = "conflict"
+			result = map[string]any{"code": "purging", "error": "记录已进入彻底清理，无法恢复。"}
+		} else {
 		policy := "active"
 		if in.Action == "ignore" {
 			policy = "ignored"
@@ -275,6 +311,7 @@ func (w *Worker) processDeliveryAction(ctx context.Context, connection, op strin
 		}
 		if err == nil {
 			err = deliveryEvent(ctx, tx, d, in.Record, true)
+		}
 		}
 	}
 	answer, _ := json.Marshal(result)
@@ -314,5 +351,5 @@ func (w *Worker) DeliveryTick(ctx context.Context) error {
 			return err
 		}
 	}
-	return w.classifyDeliveries(ctx)
+	return errors.Join(w.purgeArchivedRecords(ctx), w.classifyDeliveries(ctx))
 }

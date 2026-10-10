@@ -33,6 +33,7 @@ func (p *integrationPlugin) Init(ctx *plugin.Context) error {
 	ctx.Route("POST", "/projects/:projectId/tasks/:taskId/cancel", p.cancel)
 	ctx.Route("GET", "/projects/:projectId/records", p.records)
 	ctx.Route("GET", "/projects/:projectId/sync-deliveries", p.syncDeliveries)
+	ctx.Route("GET", "/projects/:projectId/archived-sync-records", p.archivedSyncRecords)
 	ctx.Route("POST", "/projects/:projectId/sync-delivery-actions", p.deliveryAction)
 	ctx.Route("POST", "/projects/:projectId/pairing", p.pair)
 	ctx.Route("GET", "/projects/:projectId/pairing", p.devices)

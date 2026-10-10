@@ -275,6 +275,19 @@
             ]
           }
         ]
+      },
+      {
+        "method": "GET",
+        "path": "/projects/:projectId/archived-sync-records",
+        "middlewares": [
+          { "name": "optionalAuthn" },
+          { "name": "requireFreshPassword" },
+          {
+            "name": "requirePermissions",
+            "scope": "project",
+            "permissions": ["task_checkin.read"]
+          }
+        ]
       }
     ],
     "sensitiveFields": {

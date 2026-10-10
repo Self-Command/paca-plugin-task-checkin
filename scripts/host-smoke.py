@@ -41,7 +41,7 @@ else: raise RuntimeError('official API did not become ready')
 request('PATCH','/users/me/password',{'current_password':password,'new_password':new_password},204)
 request('POST','/auth/login',{'username':'admin','password':new_password})
 installed=request('POST','/admin/plugins',{'name':plugin_id,'version':manifest['version'],'manifest':manifest,'enabled':True},201)['data']
-assert request('GET',f'/plugins/{plugin_id}/health')['schema_version']==2
+assert request('GET',f'/plugins/{plugin_id}/health')['schema_version']==3
 worker_secret=request('POST',f'/plugins/{plugin_id}/admin/worker-credential',{},201)['secret']
 project=request('POST','/projects',{'name':'Check-in acceptance','task_id_prefix':'CHECK'},201)['data']
 statuses=request('GET',f'/projects/{project["id"]}/task-statuses')['data']['items']
@@ -67,7 +67,7 @@ for phase in range(3):
         pair_ids.add(extra['id']);pair_tokens.add(extra['token'])
         request('DELETE',path+'/pairing/'+extra['id'])
     request('PATCH',f'/admin/plugins/{installed["id"]}',{'manifest':manifest,'version':manifest['version'],'enabled':True})
-    assert request('GET',f'/plugins/{plugin_id}/health')['schema_version']==2
+    assert request('GET',f'/plugins/{plugin_id}/health')['schema_version']==3
 # Persist DB and restart the official host: RNG state must not restart a sequence.
 cmd('docker','restart','paca-ci-api')
 for _ in range(45):
@@ -85,4 +85,4 @@ request('PATCH',f'/admin/plugins/{installed["id"]}',{'enabled':True})
 # Actual native worker and private S3, browser upload and exact-deadline integration.
 exec((ROOT/'scripts/checkin-integration.py').read_text(),globals())
 verification=ROOT/'verification';verification.mkdir(exist_ok=True)
-(verification/'host-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'official_core':'v0.18.6','schema':2,'settings_cas':True,'pairing_revocation':True,'pairing_entropy_survives_reload_and_restart':True,'independent_plugin_enable_disable':True,'native_photo_and_browser':True},indent=2))
+(verification/'host-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'official_core':'v0.18.6','schema':3,'settings_cas':True,'pairing_revocation':True,'pairing_entropy_survives_reload_and_restart':True,'independent_plugin_enable_disable':True,'native_photo_and_browser':True},indent=2))

@@ -2,5 +2,6 @@
 package buildinfo
 
 const Version = "0.1.0"
+const SchemaVersion = 3
 
 var SourceSHA = "unbuilt"

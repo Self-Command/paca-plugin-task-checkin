@@ -16,7 +16,7 @@ func (a DeliveryAction) Valid() bool {
 	if !UUID.MatchString(a.Connection) || !UUID.MatchString(a.Record) || len(a.Op) < 8 || len(a.Op) > 128 || a.Revision < 1 {
 		return false
 	}
-	if a.Action != "retry" && a.Action != "ignore" && a.Action != "restore" && a.Action != "associate" {
+	if a.Action != "retry" && a.Action != "ignore" && a.Action != "restore" && a.Action != "associate" && a.Action != "purge" {
 		return false
 	}
 	return a.Action != "associate" || (a.Path != "" && len(a.Path) <= 1024 && a.Created != "" && len(a.Created) <= 128)
