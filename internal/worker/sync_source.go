@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/Self-Command/paca-plugin-task-checkin/internal/model"
+	"github.com/jackc/pgx/v5"
 	"net/http"
 )
 
@@ -45,6 +46,10 @@ func (w *Worker) syncSource(out http.ResponseWriter, r *http.Request) {
 		}
 		history, historyErr := w.historicSource(r.Context(), d, task)
 		if historyErr != nil {
+			if !errors.Is(historyErr, pgx.ErrNoRows) {
+				writeJSON(out, 503, map[string]any{"code": "unavailable", "error": "来源暂不可用，请稍后重试。", "retryable": true})
+				return
+			}
 			writeJSON(out, 404, map[string]any{"code": "source_missing", "error": "来源需要重新关联。", "retryable": false})
 			return
 		}

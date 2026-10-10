@@ -113,7 +113,10 @@ func (w *Worker) historicSource(ctx context.Context, d device, task string) (map
 	}
 	source["source_state"] = "unlinked"
 	status, err := w.sourceStatus(ctx, d.Project, task)
-	if err == nil && status.State == "deleted" && status.Connection == d.Connection && status.Ref == source["source_ref"] {
+	if err != nil {
+		return nil, err
+	}
+	if status.State == "deleted" && status.Connection == d.Connection && status.Ref == source["source_ref"] {
 		source["source_state"] = "deleted"
 	}
 	return source, nil

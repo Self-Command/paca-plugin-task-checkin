@@ -266,7 +266,7 @@ func (w *Worker) processDeliveryAction(ctx context.Context, connection, op strin
 		}
 		_, err = tx.Exec(ctx, "UPDATE sync_policies SET state=$3,revision=revision+1,historical_path=CASE WHEN $4='associate' THEN $5 ELSE historical_path END,historical_created=CASE WHEN $4='associate' THEN $6 ELSE historical_created END,reason=CASE WHEN $3='ignored' THEN 'user_ignored' WHEN $4 IN('restore','associate') THEN 'user_recovery' ELSE reason END,updated_at=NOW(),checked_at=CASE WHEN $4 IN('restore','associate') THEN NOW() ELSE checked_at END WHERE connection_id=$1 AND record_id=$2", connection, in.Record, policy, in.Action, in.Path, in.Created)
 		if err == nil && policy == "active" {
-			_, err = tx.Exec(ctx, "UPDATE sync_deliveries SET state='pending',attempts=0,next_attempt=NOW(),error_code='',updated_at=NOW() WHERE record_id=$1 AND device_id IN(SELECT id FROM devices WHERE connection_id=$2 AND project_id=$3)", in.Record, connection, d.Project)
+			_, err = tx.Exec(ctx, "UPDATE sync_deliveries SET state='pending',attempts=0,next_attempt=NOW(),error_code='',record_written=CASE WHEN $4='associate' THEN false ELSE record_written END,status_verified=CASE WHEN $4='associate' THEN false ELSE status_verified END,updated_at=NOW() WHERE record_id=$1 AND device_id IN(SELECT id FROM devices WHERE connection_id=$2 AND project_id=$3)", in.Record, connection, d.Project, in.Action)
 		}
 		if err == nil {
 			err = deliveryEvent(ctx, tx, d, in.Record, true)

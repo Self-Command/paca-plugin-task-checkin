@@ -29,7 +29,8 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func fail(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]any{"error": message})
+	code := map[int]string{400: "invalid_request", 401: "token", 403: "token", 404: "missing", 409: "revision", 410: "expired", 503: "unavailable"}[status]
+	writeJSON(w, status, map[string]any{"error": message, "code": code, "retryable": status == 503, "request_id": w.Header().Get("X-Request-ID")})
 }
 func readJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 65536)
