@@ -9,7 +9,7 @@ import (
 )
 
 func (p *integrationPlugin) syncDeliveries(req *plugin.Request, res *plugin.Response) {
-	rows, err := p.db.Query("SELECT p.record_id::text,p.connection_id,p.state,p.revision,p.reason,i.title,r.kind,r.submitted_at::text,r.status,COALESCE((SELECT json_agg(json_build_object('name',d.name,'state',s.state,'attempts',s.attempts,'error_code',s.error_code,'media_verified',s.media_verified,'record_written',s.record_written,'status_verified',s.status_verified))::text FROM sync_deliveries s JOIN devices d ON d.id=s.device_id WHERE s.record_id=p.record_id),'[]') FROM sync_policies p JOIN records r ON r.id=p.record_id JOIN instances i ON i.id=r.instance_id WHERE p.project_id=$1 ORDER BY r.submitted_at DESC LIMIT 200", req.PathParam("projectId"))
+	rows, err := p.db.Query("SELECT p.record_id::text,p.connection_id,p.state,p.revision,p.reason,i.title,r.kind,r.submitted_at::text,r.status,COALESCE((SELECT json_agg(json_build_object('name',d.name,'state',s.state,'attempts',s.attempts,'error_code',s.error_code,'media_verified',s.media_verified,'record_written',s.record_written,'status_verified',s.status_verified))::text FROM sync_deliveries s JOIN devices d ON d.id=s.device_id WHERE s.record_id=p.record_id AND d.connection_id=p.connection_id AND d.project_id=p.project_id),'[]') FROM sync_policies p JOIN records r ON r.id=p.record_id JOIN instances i ON i.id=r.instance_id WHERE p.project_id=$1 ORDER BY r.submitted_at DESC LIMIT 200", req.PathParam("projectId"))
 	if err != nil {
 		res.Error(503, "同步处理状态暂不可用。")
 		return

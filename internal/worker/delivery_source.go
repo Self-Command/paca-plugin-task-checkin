@@ -79,7 +79,7 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 			}
 			_, updateErr := tx.Exec(ctx, "UPDATE sync_policies SET reason='source_missing',checked_at=NOW(),updated_at=NOW() WHERE connection_id=$1 AND record_id=$2 AND state='active' AND reason<>'user_recovery'", item.Connection, item.Record)
 			if updateErr == nil {
-				_, updateErr = tx.Exec(ctx, "UPDATE sync_deliveries SET state='needs_action',error_code='source_missing',updated_at=NOW() WHERE record_id=$1 AND state IN('pending','retry_wait')", item.Record)
+				_, updateErr = tx.Exec(ctx, "UPDATE sync_deliveries SET state='needs_action',error_code='source_missing',updated_at=NOW() WHERE record_id=$1 AND state IN('pending','retry_wait') AND device_id IN(SELECT id FROM devices WHERE connection_id=$2 AND project_id=$3)", item.Record, item.Connection, item.Project)
 			}
 			if updateErr == nil {
 				updateErr = deliveryEvent(ctx, tx, device{Project: item.Project, Connection: item.Connection}, item.Record, true)
