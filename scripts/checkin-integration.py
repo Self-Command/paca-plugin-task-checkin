@@ -173,7 +173,6 @@ exec((ROOT/'scripts/delivery-integration.py').read_text(),globals())
 request('DELETE',path+'/pairing/'+pairing['id'])
 native('GET','/checkin-api/v1/sync/changes?after=0',expected=401,headers=paired)
 native('POST','/internal/v1/pairing-info',{'token':pairing['token']},expected=401,headers=auth)
-worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()
 assert faults=={'fail_status':0,'drop_status':0},'outbox response-loss fixture was not exercised'
 (ROOT/'verification/checkin-report.json').write_text(json.dumps({'zero_lead_metadata_rejected_before_instance':True,'source_sha':os.environ['GITHUB_SHA'],'passwordless_fragment_exchange':True,'mobile_browser_upload':True,'independent_cards_end_first':True,'no_status_downgrade':True,'private_media':True,'shared_browser_card_isolation':True,'cancel_revokes_session':True,'upload_cross_deadline_rejected':True,'plugin_disable_pauses_worker':True,'status_outage_and_response_loss':faults=={'fail_status':0,'drop_status':0},'real_device':False},indent=2))
 
@@ -189,5 +188,7 @@ with sync_playwright() as pw:
     expect(page.get_by_label('时区',exact=True)).to_have_value('Asia/Shanghai',timeout=30000)
     page.get_by_role('button',name='保存设置',exact=True).click()
     expect(page.get_by_role('status').filter(has_text='设置已保存')).to_be_visible()
+    exec((ROOT/'scripts/archive-cleanup-integration.py').read_text(),globals(),locals())
     page.screenshot(path=str(ROOT/'verification/paca-settings.png'),full_page=True)
     context.close();browser.close()
+worker.terminate();worker.wait(timeout=10);log.close();proxy.shutdown()

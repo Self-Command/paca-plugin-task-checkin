@@ -17,14 +17,18 @@ export default function SyncDeliveries({path}:{path:string}){
  const [bindings,setBindings]=useState<Record<string,Binding[]>>({}),[target,setTarget]=useState<Record<string,string>>({});
  const load=async()=>{
   const items=(await api<{items:Row[]}>(path+"/sync-deliveries")).items;
-  setRows(items);
+  setRows(old=>JSON.stringify(old)===JSON.stringify(items)?old:items);
   setSelected(old=>new Set([...old].filter(id=>items.some(row=>row.record_id===id))));
  };
  useEffect(()=>{
   void load().catch(()=>setMessage("暂时无法加载同步记录，请稍后重试。"));
-  const timer=window.setInterval(()=>void load().catch(()=>{}),5000);
-  return()=>window.clearInterval(timer);
  },[path]);
+ const cleaning=rows.some(row=>row.policy==='purging');
+ useEffect(()=>{
+  if(!cleaning)return;
+  const timer=window.setInterval(()=>void load().catch(()=>{}),3000);
+  return()=>window.clearInterval(timer);
+ },[path,cleaning]);
  const associate=async(row:Row)=>{
   if(!bindings[row.connection_id]){
    try{
@@ -55,7 +59,9 @@ export default function SyncDeliveries({path}:{path:string}){
     submitted++;
    }
    setSelected(new Set());
-   setMessage(action==="purge"?`已提交 ${submitted} 条清理请求，后台会删除记录和服务器照片。`:"处理请求已提交，请刷新查看结果。");
+   setMessage(action==="purge"?`已提交 ${submitted} 条清理请求，后台会删除记录和服务器照片。`:"处理请求已提交。");
+   // Manager requests enter the worker queue. Refresh after it has run once.
+   window.setTimeout(()=>void load().catch(()=>{}),6000);
    await load();
   }catch(error){setMessage(`已提交 ${submitted} 条；`+(error instanceof Error?error.message:"其余记录暂未处理，请刷新后重试。"))}finally{setBusy(false)}
  };
@@ -68,19 +74,23 @@ export default function SyncDeliveries({path}:{path:string}){
   }catch(error){setMessage(error instanceof Error?error.message:"暂时无法读取归档记录。")}finally{setBusy(false)}
  };
  const selectedActive=rows.filter(row=>selected.has(row.record_id)&&row.policy==="active");
- const selectedArchived=rows.filter(row=>selected.has(row.record_id)&&row.policy==="archived_deleted");
+ const selectable=rows.filter(row=>row.policy!=="purging");
+ const selectedRows=selectable.filter(row=>selected.has(row.record_id));
  return <Card>
   <CardHeader><CardTitle>Obsidian 同步处理</CardTitle><CardDescription>查看照片和记录回写进度，处理失败记录。</CardDescription></CardHeader>
   <CardContent className="grid gap-3">
    <div className="flex flex-wrap gap-2">
     <Button variant="outline" disabled={busy} onClick={()=>void load().catch(()=>setMessage("暂时无法刷新，请稍后重试。"))}>刷新记录</Button>
     <Button variant="outline" disabled={busy||!selectedActive.length} onClick={()=>void act("ignore",selectedActive)}>忽略所选故障项</Button>
-    <Button variant="outline" disabled={busy||!selectedArchived.length} onClick={()=>void act("purge",selectedArchived)}>彻底清理所选归档项</Button>
+    <Button variant="outline" disabled={busy||!selectable.length} onClick={()=>setSelected(new Set(selectable.map(row=>row.record_id)))}>全选记录</Button>
+    <Button variant="outline" disabled={busy||!selected.size} onClick={()=>setSelected(new Set())}>取消选择</Button>
+    <Button variant="destructive" disabled={busy||!selectedRows.length} onClick={()=>void act("purge",selectedRows)}>彻底清理所选记录{selectedRows.length?` (${selectedRows.length})`:""}</Button>
     <Button variant="outline" disabled={busy} onClick={()=>void previewArchived()}>清理已归档记录</Button>
    </div>
+   <p className="text-sm" role="status">已选择 {selectedRows.length} 条记录。点击下方任务标题区域即可选择。</p>
    {confirmation&&<Card>
     <CardHeader>
-     <CardTitle>{confirmation.action==="purge"?"确认彻底清理归档记录":"确认忽略同步记录"}</CardTitle>
+     <CardTitle>{confirmation.action==="purge"?"确认彻底清理打卡记录":"确认忽略同步记录"}</CardTitle>
      <CardDescription>{confirmation.action==="purge"?"永久删除以下打卡记录及服务器照片，无法恢复。已保存到 Obsidian 的笔记和附件保留。":"同一笔记库的设备会停止重试所选记录，任务、记录和照片保留，可恢复同步。"}</CardDescription>
     </CardHeader>
     <CardContent className="grid gap-3">
@@ -94,10 +104,11 @@ export default function SyncDeliveries({path}:{path:string}){
     </CardContent>
    </Card>}
    {rows.length?rows.map(row=><div className="grid gap-2 rounded-lg border p-3" key={row.record_id}>
-    <label className="flex items-center gap-2">
-     <input type="checkbox" checked={selected.has(row.record_id)} disabled={busy||(row.policy!=="active"&&row.policy!=="archived_deleted")} onChange={e=>setSelected(old=>{const next=new Set(old);if(e.target.checked)next.add(row.record_id);else next.delete(row.record_id);return next})}/>
-     <span>{row.title} · {row.kind==="start"?"开始打卡":"结束打卡"}</span>
-    </label>
+    <button type="button" aria-pressed={selected.has(row.record_id)} aria-label={`选择记录：${row.title} · ${row.kind==="start"?"开始打卡":"结束打卡"}`} className="flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-md border p-3 text-left aria-pressed:border-primary aria-pressed:bg-accent disabled:cursor-default disabled:opacity-60" disabled={busy||row.policy==="purging"} onClick={()=>setSelected(old=>{const next=new Set(old);if(next.has(row.record_id))next.delete(row.record_id);else next.add(row.record_id);return next})}>
+     <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center rounded border text-lg">{selected.has(row.record_id)?"✓":""}</span>
+     <span className="flex-1">{row.title} · {row.kind==="start"?"开始打卡":"结束打卡"}</span>
+     <span className="text-sm">{selected.has(row.record_id)?"已选":"选择"}</span>
+    </button>
     <p className="text-sm text-muted-foreground">{new Date(row.submitted_at).toLocaleString()} · {row.paca_status==="synced"?"Paca 状态已更新":"Paca 状态更新中"}</p>
     {row.policy!=="active"?<p className="text-sm">{stages[row.policy]}</p>:row.devices.length?row.devices.map((d,i)=><div key={i} className="text-sm">
      <p>{d.name}：{stages[d.state]??"等待同步"}{d.error_code?" · "+(errors[d.error_code]??"需要处理同步记录"):""}</p>
@@ -110,7 +121,7 @@ export default function SyncDeliveries({path}:{path:string}){
        <Button size="sm" variant="outline" disabled={busy} onClick={()=>void act("retry",[row])}>重试同步</Button>
        <Button size="sm" variant="outline" disabled={busy} onClick={()=>void act("ignore",[row])}>忽略此同步项</Button>
       </>:<Button size="sm" variant="outline" disabled={busy} onClick={()=>void act("restore",[row])}>恢复同步</Button>}
-      {row.policy==="archived_deleted"&&<Button size="sm" variant="destructive" disabled={busy} onClick={()=>void act("purge",[row])}>彻底清理</Button>}
+      <Button variant="destructive" disabled={busy} onClick={()=>void act("purge",[row])}>彻底清理</Button>
       <Button size="sm" variant="outline" disabled={busy} onClick={()=>void associate(row)}>重新关联笔记</Button>
      </>}
     </div>

@@ -61,13 +61,13 @@ func (p *integrationPlugin) deliveryAction(req *plugin.Request, res *plugin.Resp
 			res.JSON(202, map[string]any{"op_id": in.Op, "state": prior.Rows[0][1]})
 			return
 		}
-		eligible, readErr := p.db.Query("SELECT p.record_id FROM sync_policies p WHERE p.project_id=$1 AND p.connection_id=$2 AND p.record_id=$3 AND p.revision=$4 AND p.state='archived_deleted' AND NOT EXISTS(SELECT 1 FROM changes c WHERE c.record_id=p.record_id AND (c.project_id<>p.project_id OR c.connection_id<>p.connection_id)) AND NOT EXISTS(SELECT 1 FROM sync_policies other WHERE other.record_id=p.record_id AND other.connection_id<>p.connection_id)", req.PathParam("projectId"), in.Connection, in.Record, in.Revision)
+		eligible, readErr := p.db.Query("SELECT p.record_id FROM sync_policies p WHERE p.project_id=$1 AND p.connection_id=$2 AND p.record_id=$3 AND p.revision=$4 AND NOT EXISTS(SELECT 1 FROM changes c WHERE c.record_id=p.record_id AND (c.project_id<>p.project_id OR c.connection_id<>p.connection_id)) AND NOT EXISTS(SELECT 1 FROM sync_policies other WHERE other.record_id=p.record_id AND other.connection_id<>p.connection_id)", req.PathParam("projectId"), in.Connection, in.Record, in.Revision)
 		if readErr != nil {
 			res.Error(503, "归档记录暂不可用。")
 			return
 		}
 		if len(eligible.Rows) != 1 {
-			res.Error(409, "只能清理未被其他来源使用的归档记录，请刷新后核对。")
+			res.Error(409, "记录已变化或仍被其他来源使用，请刷新后核对。")
 			return
 		}
 	}

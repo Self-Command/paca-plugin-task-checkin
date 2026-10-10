@@ -208,12 +208,32 @@ func (w *Worker) deliveryAction(out http.ResponseWriter, r *http.Request) {
 		fail(out, 400, "处理操作无效。")
 		return
 	}
-	if in.Action == "purge" {
-		fail(out, 403, "请在 Paca 项目设置中确认清理归档记录。")
-		return
-	}
 	raw, _ := json.Marshal(in)
 	hash := model.Hash(in)
+	if in.Action == "purge" {
+		var priorHash, priorState string
+		var priorResult []byte
+		priorErr := w.DB.QueryRow(r.Context(), "SELECT o.request_hash,o.state,o.result FROM sync_delivery_ops o WHERE o.connection_id=$1 AND o.op_id=$2 AND o.actor=$3 AND (EXISTS(SELECT 1 FROM sync_policies p WHERE p.project_id=$4 AND p.connection_id=$1 AND p.record_id=o.record_id) OR EXISTS(SELECT 1 FROM sync_purges q WHERE q.project_id=$4 AND q.connection_id=$1 AND q.record_id=o.record_id))", d.Connection, in.Op, d.ID, d.Project).Scan(&priorHash, &priorState, &priorResult)
+		if priorErr == nil {
+			if priorHash != hash {
+				fail(out, 409, "清理操作内容已变化。")
+				return
+			}
+			if priorState != "queued" {
+				var prior any
+				_ = json.Unmarshal(priorResult, &prior)
+				status := 200
+				if priorState == "conflict" {
+					status = 409
+				}
+				writeJSON(out, status, prior)
+				return
+			}
+		} else if !errors.Is(priorErr, pgx.ErrNoRows) {
+			fail(out, 503, "清理结果暂不可用。")
+			return
+		}
+	}
 	var stored string
 	err = w.DB.QueryRow(r.Context(), "INSERT INTO sync_delivery_ops(connection_id,op_id,request_hash,actor,record_id,result,request) SELECT $1,$2,$3,$4,$5,'{}',$6::jsonb WHERE EXISTS(SELECT 1 FROM sync_policies WHERE project_id=$7 AND connection_id=$1 AND record_id=$5) ON CONFLICT(connection_id,op_id) DO UPDATE SET op_id=sync_delivery_ops.op_id RETURNING request_hash", d.Connection, in.Op, hash, d.ID, in.Record, string(raw), d.Project).Scan(&stored)
 	if err != nil || hash != stored {
@@ -278,9 +298,18 @@ func (w *Worker) processDeliveryAction(ctx context.Context, connection, op strin
 		state = "conflict"
 		result = map[string]any{"code": "revision", "error": "同步项已变化，请刷新后处理。"}
 	} else if in.Action == "purge" {
-		if actor != "project_manager" || policy != "archived_deleted" {
+		var authorized bool
+		if actor == "project_manager" {
+			authorized = true
+		} else {
+			err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM devices WHERE id::text=$1 AND enabled AND project_id=$2 AND connection_id=$3)", actor, d.Project, connection).Scan(&authorized)
+			if err != nil {
+				return err
+			}
+		}
+		if !authorized {
 			state = "conflict"
-			result = map[string]any{"code": "not_archived", "error": "只能清理已归档记录。"}
+			result = map[string]any{"code": "scope", "error": "当前设备无权清理这条记录。"}
 		} else {
 			var allowed bool
 			err = tx.QueryRow(ctx, "SELECT NOT EXISTS(SELECT 1 FROM changes WHERE record_id=$1 AND (project_id<>$2 OR connection_id<>$3)) AND NOT EXISTS(SELECT 1 FROM sync_policies WHERE record_id=$1 AND connection_id<>$3)", in.Record, d.Project, connection).Scan(&allowed)
