@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"time"
 )
 
@@ -17,8 +19,30 @@ func (w *Worker) sourceStatus(ctx context.Context, project, task string) (source
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var status sourceStatus
-	err := w.call(ctx, "GET", "/plugins/com.selfcommand.tasknotes-webhook/projects/"+project+"/tasks/"+task+"/source-status", nil, &status)
-	return status, err
+	if err := w.control(ctx); err != nil {
+		return status, err
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", w.API+"/api/v1/plugins/com.selfcommand.tasknotes-webhook/projects/"+project+"/tasks/"+task+"/source-status", nil)
+	if err != nil {
+		return status, err
+	}
+	req.Header.Set("X-API-Key", w.Key)
+	response, err := w.HTTP.Do(req)
+	if err != nil {
+		return status, errors.New("source status unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return status, apiError{response.StatusCode}
+	}
+	// Plugin SDK responses are plain JSON; only official core endpoints use data.
+	if err = json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&status); err != nil {
+		return status, err
+	}
+	if status.State != "active" && status.State != "unlinked" && status.State != "deleted" {
+		return status, errors.New("invalid source status")
+	}
+	return status, nil
 }
 
 func (w *Worker) classifyDeliveries(ctx context.Context) error {

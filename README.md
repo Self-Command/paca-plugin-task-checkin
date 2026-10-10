@@ -14,7 +14,7 @@
 
 ## 独立安装和运行
 
-1. 只下载同一成功 Release 的 plugin-install、checksums、image-digest 和验证报告。解压 wasm/frontend 到现有 Paca 插件挂载目录，通过管理 API 注册 plugin.json，启用后核对 /health 的源码 SHA 和 schema 1。
+1. 只下载同一成功 Release 的 plugin-install、checksums、image-digest 和验证报告。解压 wasm/frontend 到现有 Paca 插件挂载目录，通过管理 API 注册 plugin.json，启用后核对 /health 的源码 SHA 和 schema 2。
 2. PostgreSQL 为 worker 创建仅可访问 `plugin_data_com_selfcommand_task_checkin` 的角色；默认权限、表和 sequence 权限均限该 schema。核心任务只通过官方 REST API 写入。插件迁移由官方宿主执行。
 3. 使用仅加入目标项目的专用 Paca 服务账号，授予任务读写、状态读取和接入插件 source-link 读取权限，创建 API key。不要把生产管理员 key 用作常驻 worker key。
 4. 通过插件管理凭据接口创建 worker secret，分别在运行时挂载 API key、worker secret、grant secret、internal action secret、S3 凭据文件。grant/action secret 分开、随机不少于 32 字节；不填入网页、镜像或插件 JSON。
@@ -27,7 +27,11 @@
 
 `/checkin-api/v1/` 面向短期单卡会话；fragment 换取 HttpOnly、Secure、SameSite 会话后立即从地址清除。浏览器不持有 Paca 或 PushGo 凭据。临时照片与成功照片均有持久清理状态，上传失败重启后可回收；规范化为 JPEG、移除 EXIF，限制 10 MiB 和 2500 万像素。
 
-`/checkin-api/v1/sync/` 使用每设备可撤销配对令牌，读取范围限项目、来源连接和已记录媒体。增量记录、照片、状态版本分别处理。状态写回要求当前 revision；旧打卡记录仍可下载照片，但不能覆盖较新状态。冲突和重复解决保留原结果。
+`/checkin-api/v1/sync/` 使用可撤销配对码，读取范围限项目、来源连接和已记录媒体。同一笔记库的电脑和手机可共用配对码，实际下载与回写进度按设备分别保存。增量记录、照片、状态版本分别处理。状态写回要求当前 revision；旧打卡记录仍可下载照片，但不能覆盖较新状态。冲突和重复解决保留原结果。
+
+项目设置中的“Obsidian 同步处理”提供重试、忽略、批量清理、恢复和重新关联笔记。忽略只停止所选记录的同步，保留任务、打卡记录及照片，并在同一来源连接的设备间共享。明确删除墓碑对应的记录自动归档；未知关联保留人工处理，服务暂不可用不会被判定为删除。临时失败从 30 秒起退避，最长 15 分钟，累计 10 次后等待处理。重新关联历史记录只回写记录和照片。
+
+schema 2 增加共享处理策略、按设备交付阶段、独立事件游标及幂等操作审计，保留既有数据与配对。升级前备份数据库、插件目录、配置及私有对象存储；回滚必须恢复对应数据库快照和产物。
 
 `/internal/v1/action`、`/internal/v1/task`、`/internal/v1/writeback-match` 使用独立内部授权，仅供 B/A 对接；插件之间不访问其他 schema。receipt 匹配要求来源、路径、状态、正文 SHA 和当前实例 revision 全部一致。配合固定来源版本的 A/D，Action 已验证真实官方 Obsidian 界面创建任务、网页拍照打卡、状态和照片回写，以及回写事件确认不重新生成提醒。验证报告随源码发行保留；真实手机验收单独记录。
 
