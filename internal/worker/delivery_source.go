@@ -32,7 +32,7 @@ func (w *Worker) classifyDeliveries(ctx context.Context) error {
 	}
 	type candidate struct {
 		Project, Connection, Record, Task, Reason string
-		Raw                               []byte
+		Raw                                       []byte
 	}
 	items := []candidate{}
 	for rows.Next() {
