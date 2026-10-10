@@ -38,7 +38,7 @@
 .checkin-ui .sync-feedback{font-size:13px;padding:8px 0;color:var(--muted)}
 .checkin-ui .sync-record-card .sync-feedback{padding:0 16px 12px}
 .checkin-ui .sync-empty{padding:32px 0;text-align:center;color:var(--muted);font-size:14px}
-.checkin-ui .sync-confirm{width:min(520px,calc(100vw - 32px));max-height:80vh;overflow:auto;border:1px solid var(--border);border-radius:16px;background:var(--card);color:var(--foreground);padding:24px;box-shadow:0 24px 80px #0003}
+.checkin-ui .sync-confirm{width:min(520px,calc(100vw - 32px));max-height:80vh;margin:auto;overflow:auto;border:1px solid var(--border);border-radius:16px;background:var(--card);color:var(--foreground);padding:24px;box-shadow:0 24px 80px #0003}
 .checkin-ui .sync-confirm::backdrop{background:#0006}
 .checkin-ui .sync-confirm h3{font-size:18px;font-weight:600;margin:0 0 12px}
 .checkin-ui .sync-confirm>p{font-size:14px;line-height:1.6;color:var(--muted)}

@@ -43,6 +43,12 @@ select.click()
 expect(select).to_have_attribute('aria-pressed','true')
 page.get_by_role('button',name='彻底清理所选记录 (1)',exact=True).click()
 expect(page.get_by_text('清理单条待处理 · 结束打卡',exact=False).last).to_be_visible()
+modal=page.locator('dialog.sync-confirm')
+modal_box=modal.bounding_box()
+viewport=page.viewport_size
+assert abs(modal_box['x']+modal_box['width']/2-viewport['width']/2)<2,modal_box
+assert abs(modal_box['y']+modal_box['height']/2-viewport['height']/2)<2,modal_box
+page.screenshot(path=str(ROOT/'verification/archive-cleanup-confirm.png'))
 page.get_by_role('button',name='取消',exact=True).last.click()
 assert scalar(f"SELECT count(*) FROM {prefix}records WHERE id='{single['record']}'")=='1'
 page.get_by_role('button',name='彻底清理所选记录 (1)',exact=True).click()
@@ -85,4 +91,4 @@ page.get_by_role('button',name='全选记录',exact=True).click()
 assert all(value=='true' for value in page.get_by_role('button',name='选择记录：',exact=False).evaluate_all('(elements)=>elements.map(e=>e.getAttribute("aria-pressed"))'))
 page.get_by_role('button',name='取消选择',exact=True).click()
 page.screenshot(path=str(ROOT/'verification/archive-cleanup-selection.png'),full_page=True)
-(ROOT/'verification/archive-cleanup-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'real_paca_single_and_batch_ui':True,'selection_target_at_least_44px':True,'active_ignored_archived_selectable':True,'selection_survives_refresh':True,'cancel_preserves_record':True,'record_and_private_photo_removed':True,'ordinary_tasks_preserved':True,'paired_device_direct_purge':True,'request_idempotency':True,'offline_device_tombstones':True,'cross_connection_and_unauthenticated_denied':True},indent=2))
+(ROOT/'verification/archive-cleanup-report.json').write_text(json.dumps({'source_sha':os.environ['GITHUB_SHA'],'real_paca_single_and_batch_ui':True,'selection_target_at_least_44px':True,'confirmation_dialog_centered':True,'active_ignored_archived_selectable':True,'selection_survives_refresh':True,'cancel_preserves_record':True,'record_and_private_photo_removed':True,'ordinary_tasks_preserved':True,'paired_device_direct_purge':True,'request_idempotency':True,'offline_device_tombstones':True,'cross_connection_and_unauthenticated_denied':True},indent=2))
