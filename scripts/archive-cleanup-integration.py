@@ -58,6 +58,7 @@ for item in batch:
 page.wait_for_timeout(6500)
 for item in batch:
     expect(page.get_by_role('button',name='选择记录：'+item['title']+' · 结束打卡',exact=True)).to_have_attribute('aria-pressed','true')
+page.screenshot(path=str(ROOT/'verification/archive-cleanup-selected.png'),full_page=True)
 page.get_by_role('button',name='彻底清理所选记录 (3)',exact=True).click()
 page.get_by_role('button',name='确认永久删除',exact=True).click()
 for item in batch:
